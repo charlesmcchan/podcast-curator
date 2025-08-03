@@ -22,7 +22,7 @@
   - Create src/nanook_curator/config.py file
   - _Requirements: 5.1, 5.2_
 
-- [ ] 3. Implement YouTube API integration
+- [x] 3. Implement YouTube API integration
 - [x] 3.1 Create YouTube Data API client wrapper
   - Implement YouTube API client with authentication and rate limiting
   - Create methods for video search with date filtering and trending indicators
@@ -46,7 +46,7 @@
   - _Requirements: 3.1, 3.3, 3.4_
 
 - [ ] 4. Implement transcript processing
-- [ ] 4.1 Create transcript fetcher using youtube-transcript-api
+- [x] 4.1 Create transcript fetcher using youtube-transcript-api
   - Implement transcript retrieval with fallback handling for unavailable transcripts
   - Add transcript cleaning and parsing functionality
   - Create error handling for videos without transcripts
