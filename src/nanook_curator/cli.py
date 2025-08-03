@@ -1,0 +1,1 @@
+# Placeholder for CLI interface - will be implemented in task 11

@@ -1,0 +1,1 @@
+# Placeholder for configuration management - will be implemented in task 2.2
