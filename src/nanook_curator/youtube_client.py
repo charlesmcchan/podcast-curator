@@ -259,19 +259,26 @@ class YouTubeClient:
     
     def get_video_details(self, video_ids: List[str]) -> List[Dict[str, Any]]:
         """
-        Get detailed information for multiple videos.
+        Get detailed information for multiple videos with comprehensive metadata.
+        
+        Implements detailed metadata retrieval including:
+        - View count, like count, comment count, upload date
+        - Video status and availability information
+        - Content details (duration, definition, etc.)
+        - Handles missing or restricted video data gracefully
         
         Args:
             video_ids: List of YouTube video IDs
             
         Returns:
-            List of detailed video information
+            List of detailed video information with complete metadata
             
         Raises:
             RateLimitError: If API quota is exceeded
             YouTubeAPIError: If details fetching fails
         """
         if not video_ids:
+            logger.debug("No video IDs provided for details fetching")
             return []
         
         self._check_quota('videos')
@@ -279,12 +286,15 @@ class YouTubeClient:
         # API allows up to 50 video IDs per request
         batch_size = 50
         all_videos = []
+        failed_video_ids = []
+        
+        logger.info(f"Fetching detailed metadata for {len(video_ids)} videos")
         
         for i in range(0, len(video_ids), batch_size):
             batch_ids = video_ids[i:i + batch_size]
             video_ids_str = ','.join(batch_ids)
             
-            logger.debug(f"Fetching details for {len(batch_ids)} videos")
+            logger.debug(f"Processing batch {i//batch_size + 1}: {len(batch_ids)} videos")
             
             def _get_details():
                 request = self.youtube.videos().list(
@@ -298,31 +308,241 @@ class YouTubeClient:
                 self._update_quota('videos')
                 
                 batch_videos = response.get('items', [])
-                all_videos.extend(batch_videos)
+                
+                # Process each video and handle missing/restricted data
+                for video in batch_videos:
+                    processed_video = self._process_video_details(video)
+                    if processed_video:
+                        all_videos.append(processed_video)
+                    else:
+                        failed_video_ids.append(video.get('id', 'unknown'))
+                
+                # Check for videos that weren't returned (deleted, private, etc.)
+                returned_ids = {video['id'] for video in batch_videos}
+                missing_ids = set(batch_ids) - returned_ids
+                
+                if missing_ids:
+                    logger.warning(f"Videos not found or restricted: {list(missing_ids)}")
+                    failed_video_ids.extend(missing_ids)
                 
             except Exception as e:
                 logger.error(f"Failed to fetch video details for batch: {e}")
+                failed_video_ids.extend(batch_ids)
                 # Continue with other batches
                 continue
         
-        logger.info(f"Retrieved details for {len(all_videos)} videos")
+        success_count = len(all_videos)
+        failure_count = len(failed_video_ids)
+        
+        logger.info(f"Video details retrieval complete: {success_count} successful, {failure_count} failed")
+        
+        if failed_video_ids:
+            logger.debug(f"Failed video IDs: {failed_video_ids[:10]}{'...' if len(failed_video_ids) > 10 else ''}")
+        
         return all_videos
+    
+    def _process_video_details(self, video: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Process individual video details and handle missing/restricted data gracefully.
+        
+        Args:
+            video: Raw video data from YouTube API
+            
+        Returns:
+            Processed video data or None if video should be skipped
+        """
+        try:
+            video_id = video.get('id')
+            if not video_id:
+                logger.warning("Video missing ID, skipping")
+                return None
+            
+            snippet = video.get('snippet', {})
+            statistics = video.get('statistics', {})
+            status = video.get('status', {})
+            content_details = video.get('contentDetails', {})
+            
+            # Check if video is available for processing
+            if not self._is_video_available(status, snippet):
+                logger.debug(f"Video {video_id} not available for processing")
+                return None
+            
+            # Extract and validate metadata with graceful handling of missing data
+            processed_video = {
+                'id': video_id,
+                'snippet': {
+                    'title': snippet.get('title', 'Unknown Title'),
+                    'channelId': snippet.get('channelId', ''),
+                    'channelTitle': snippet.get('channelTitle', 'Unknown Channel'),
+                    'publishedAt': snippet.get('publishedAt', ''),
+                    'description': snippet.get('description', ''),
+                    'thumbnails': snippet.get('thumbnails', {}),
+                    'tags': snippet.get('tags', []),
+                    'categoryId': snippet.get('categoryId', ''),
+                    'defaultLanguage': snippet.get('defaultLanguage', ''),
+                    'defaultAudioLanguage': snippet.get('defaultAudioLanguage', '')
+                },
+                'statistics': {
+                    'viewCount': self._safe_int_parse(statistics.get('viewCount', '0')),
+                    'likeCount': self._safe_int_parse(statistics.get('likeCount', '0')),
+                    'commentCount': self._safe_int_parse(statistics.get('commentCount', '0')),
+                    # Note: dislikeCount is no longer available in YouTube API
+                    'favoriteCount': self._safe_int_parse(statistics.get('favoriteCount', '0'))
+                },
+                'contentDetails': {
+                    'duration': content_details.get('duration', ''),
+                    'dimension': content_details.get('dimension', ''),
+                    'definition': content_details.get('definition', ''),
+                    'caption': content_details.get('caption', 'false'),
+                    'licensedContent': content_details.get('licensedContent', False),
+                    'projection': content_details.get('projection', 'rectangular')
+                },
+                'status': {
+                    'uploadStatus': status.get('uploadStatus', ''),
+                    'privacyStatus': status.get('privacyStatus', ''),
+                    'license': status.get('license', ''),
+                    'embeddable': status.get('embeddable', True),
+                    'publicStatsViewable': status.get('publicStatsViewable', True)
+                }
+            }
+            
+            # Add engagement metrics
+            processed_video['engagementMetrics'] = self._calculate_engagement_metrics(processed_video)
+            
+            return processed_video
+            
+        except Exception as e:
+            logger.warning(f"Error processing video details for {video.get('id', 'unknown')}: {e}")
+            return None
+    
+    def _is_video_available(self, status: Dict[str, Any], snippet: Dict[str, Any]) -> bool:
+        """
+        Check if video is available for processing based on status and snippet data.
+        
+        Args:
+            status: Video status information
+            snippet: Video snippet information
+            
+        Returns:
+            True if video is available for processing
+        """
+        # Check upload status
+        upload_status = status.get('uploadStatus', '')
+        if upload_status not in ['processed', '']:
+            logger.debug(f"Video not processed: upload_status={upload_status}")
+            return False
+        
+        # Check privacy status
+        privacy_status = status.get('privacyStatus', '')
+        if privacy_status in ['private', 'privacyStatusUnspecified']:
+            logger.debug(f"Video not public: privacy_status={privacy_status}")
+            return False
+        
+        # Check if basic metadata is available
+        if not snippet.get('title') or snippet.get('title') == '[Private video]':
+            logger.debug("Video title indicates private or deleted video")
+            return False
+        
+        if not snippet.get('publishedAt'):
+            logger.debug("Video missing publish date")
+            return False
+        
+        return True
+    
+    def _safe_int_parse(self, value: str) -> int:
+        """
+        Safely parse string to integer with fallback to 0.
+        
+        Args:
+            value: String value to parse
+            
+        Returns:
+            Parsed integer or 0 if parsing fails
+        """
+        try:
+            return int(value) if value else 0
+        except (ValueError, TypeError):
+            return 0
+    
+    def _calculate_engagement_metrics(self, video: Dict[str, Any]) -> Dict[str, float]:
+        """
+        Calculate engagement metrics for a video.
+        
+        Implements engagement metrics calculation including:
+        - Like-to-view ratio
+        - Comment-to-view ratio  
+        - Overall engagement rate
+        - Engagement quality score
+        
+        Args:
+            video: Processed video data
+            
+        Returns:
+            Dictionary of engagement metrics
+        """
+        statistics = video.get('statistics', {})
+        view_count = statistics.get('viewCount', 0)
+        like_count = statistics.get('likeCount', 0)
+        comment_count = statistics.get('commentCount', 0)
+        
+        # Avoid division by zero
+        if view_count == 0:
+            return {
+                'likeToViewRatio': 0.0,
+                'commentToViewRatio': 0.0,
+                'engagementRate': 0.0,
+                'engagementScore': 0.0,
+                'likeRatio': 0.0,
+                'viewToSubscriberRatio': 0.0  # Will be calculated when channel info is available
+            }
+        
+        # Calculate basic engagement ratios
+        like_to_view_ratio = like_count / view_count
+        comment_to_view_ratio = comment_count / view_count
+        engagement_rate = (like_count + comment_count) / view_count
+        
+        # Calculate like ratio (estimate since dislikes not available)
+        # Use engagement patterns to estimate like ratio
+        # Higher engagement typically correlates with higher like ratio
+        estimated_like_ratio = min(0.85 + (engagement_rate * 15), 1.0)
+        
+        # Calculate engagement quality score (0-100)
+        # Combines multiple factors for overall engagement assessment
+        engagement_score = min(
+            (like_to_view_ratio * 2000) +  # Like ratio component (up to 20 points)
+            (comment_to_view_ratio * 5000) +  # Comment ratio component (up to 50 points)
+            (estimated_like_ratio * 30),  # Like ratio component (up to 30 points)
+            100.0
+        )
+        
+        return {
+            'likeToViewRatio': like_to_view_ratio,
+            'commentToViewRatio': comment_to_view_ratio,
+            'engagementRate': engagement_rate,
+            'engagementScore': engagement_score,
+            'likeRatio': estimated_like_ratio,
+            'viewToSubscriberRatio': 0.0  # Will be updated when channel info is available
+        }
     
     def get_channel_info(self, channel_ids: List[str]) -> Dict[str, Dict[str, Any]]:
         """
-        Get channel information for multiple channels.
+        Get channel information for multiple channels with subscriber data for engagement metrics.
+        
+        Retrieves channel information needed for calculating view-to-subscriber ratios
+        and other channel-based engagement metrics.
         
         Args:
             channel_ids: List of YouTube channel IDs
             
         Returns:
-            Dictionary mapping channel ID to channel info
+            Dictionary mapping channel ID to processed channel info
             
         Raises:
             RateLimitError: If API quota is exceeded
             YouTubeAPIError: If channel info fetching fails
         """
         if not channel_ids:
+            logger.debug("No channel IDs provided for channel info fetching")
             return {}
         
         self._check_quota('channels')
@@ -333,12 +553,15 @@ class YouTubeClient:
         # API allows up to 50 channel IDs per request
         batch_size = 50
         all_channels = {}
+        failed_channel_ids = []
+        
+        logger.info(f"Fetching channel information for {len(unique_channel_ids)} channels")
         
         for i in range(0, len(unique_channel_ids), batch_size):
             batch_ids = unique_channel_ids[i:i + batch_size]
             channel_ids_str = ','.join(batch_ids)
             
-            logger.debug(f"Fetching info for {len(batch_ids)} channels")
+            logger.debug(f"Processing channel batch {i//batch_size + 1}: {len(batch_ids)} channels")
             
             def _get_channels():
                 request = self.youtube.channels().list(
@@ -352,17 +575,90 @@ class YouTubeClient:
                 self._update_quota('channels')
                 
                 batch_channels = response.get('items', [])
+                
+                # Process each channel and handle missing data
                 for channel in batch_channels:
-                    channel_id = channel['id']
-                    all_channels[channel_id] = channel
+                    processed_channel = self._process_channel_info(channel)
+                    if processed_channel:
+                        channel_id = channel['id']
+                        all_channels[channel_id] = processed_channel
+                    else:
+                        failed_channel_ids.append(channel.get('id', 'unknown'))
+                
+                # Check for channels that weren't returned
+                returned_ids = {channel['id'] for channel in batch_channels}
+                missing_ids = set(batch_ids) - returned_ids
+                
+                if missing_ids:
+                    logger.warning(f"Channels not found: {list(missing_ids)}")
+                    failed_channel_ids.extend(missing_ids)
                     
             except Exception as e:
                 logger.error(f"Failed to fetch channel info for batch: {e}")
+                failed_channel_ids.extend(batch_ids)
                 # Continue with other batches
                 continue
         
-        logger.info(f"Retrieved info for {len(all_channels)} channels")
+        success_count = len(all_channels)
+        failure_count = len(failed_channel_ids)
+        
+        logger.info(f"Channel info retrieval complete: {success_count} successful, {failure_count} failed")
+        
+        if failed_channel_ids:
+            logger.debug(f"Failed channel IDs: {failed_channel_ids[:5]}{'...' if len(failed_channel_ids) > 5 else ''}")
+        
         return all_channels
+    
+    def _process_channel_info(self, channel: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Process individual channel information and handle missing data gracefully.
+        
+        Args:
+            channel: Raw channel data from YouTube API
+            
+        Returns:
+            Processed channel data or None if channel should be skipped
+        """
+        try:
+            channel_id = channel.get('id')
+            if not channel_id:
+                logger.warning("Channel missing ID, skipping")
+                return None
+            
+            snippet = channel.get('snippet', {})
+            statistics = channel.get('statistics', {})
+            status = channel.get('status', {})
+            
+            # Process channel data with graceful handling of missing fields
+            processed_channel = {
+                'id': channel_id,
+                'snippet': {
+                    'title': snippet.get('title', 'Unknown Channel'),
+                    'description': snippet.get('description', ''),
+                    'customUrl': snippet.get('customUrl', ''),
+                    'publishedAt': snippet.get('publishedAt', ''),
+                    'thumbnails': snippet.get('thumbnails', {}),
+                    'country': snippet.get('country', ''),
+                    'defaultLanguage': snippet.get('defaultLanguage', '')
+                },
+                'statistics': {
+                    'viewCount': self._safe_int_parse(statistics.get('viewCount', '0')),
+                    'subscriberCount': self._safe_int_parse(statistics.get('subscriberCount', '0')),
+                    'videoCount': self._safe_int_parse(statistics.get('videoCount', '0')),
+                    'hiddenSubscriberCount': statistics.get('hiddenSubscriberCount', False)
+                },
+                'status': {
+                    'privacyStatus': status.get('privacyStatus', ''),
+                    'isLinked': status.get('isLinked', False),
+                    'longUploadsStatus': status.get('longUploadsStatus', '')
+                }
+            }
+            
+            return processed_channel
+            
+        except Exception as e:
+            logger.warning(f"Error processing channel info for {channel.get('id', 'unknown')}: {e}")
+            return None
     
     def discover_videos(self, keywords: List[str], max_videos: int = 10, days_back: int = 7) -> List[VideoData]:
         """
@@ -531,33 +827,48 @@ class YouTubeClient:
     
     def _convert_to_video_data(self, video: Dict[str, Any], channel_info: Dict[str, Dict[str, Any]]) -> VideoData:
         """
-        Convert YouTube API video response to VideoData object.
+        Convert enhanced YouTube API video response to VideoData object.
+        
+        Uses the enhanced video details with engagement metrics and handles
+        missing or restricted video data gracefully.
         
         Args:
-            video: Video data from YouTube API
+            video: Enhanced video data from YouTube API (processed by _process_video_details)
             channel_info: Channel information mapping
             
         Returns:
-            VideoData object
+            VideoData object with complete metadata
         """
         video_id = video['id']
         snippet = video['snippet']
         statistics = video.get('statistics', {})
+        engagement_metrics = video.get('engagementMetrics', {})
         
-        # Get channel info
+        # Get channel info for view-to-subscriber ratio calculation
         channel_id = snippet['channelId']
         channel_data = channel_info.get(channel_id, {})
         channel_snippet = channel_data.get('snippet', {})
+        channel_statistics = channel_data.get('statistics', {})
         
-        # Parse statistics with defaults
-        view_count = int(statistics.get('viewCount', 0))
-        like_count = int(statistics.get('likeCount', 0))
-        comment_count = int(statistics.get('commentCount', 0))
+        # Parse statistics with defaults (handle both processed and raw API data)
+        view_count = self._safe_int_parse(str(statistics.get('viewCount', 0)))
+        like_count = self._safe_int_parse(str(statistics.get('likeCount', 0)))
+        comment_count = self._safe_int_parse(str(statistics.get('commentCount', 0)))
+        
+        # Calculate view-to-subscriber ratio if subscriber count is available
+        subscriber_count = self._safe_int_parse(str(channel_statistics.get('subscriberCount', 0)))
+        if subscriber_count > 0 and view_count > 0:
+            view_to_subscriber_ratio = view_count / subscriber_count
+            # Update engagement metrics with calculated ratio
+            engagement_metrics['viewToSubscriberRatio'] = view_to_subscriber_ratio
+        else:
+            engagement_metrics['viewToSubscriberRatio'] = 0.0
         
         # Parse upload date
         upload_date = snippet['publishedAt']
         
-        return VideoData(
+        # Create VideoData object with enhanced metadata
+        video_data = VideoData(
             video_id=video_id,
             title=snippet['title'],
             channel=channel_snippet.get('title', snippet['channelTitle']),
@@ -569,6 +880,17 @@ class YouTubeClient:
             quality_score=None,  # Will be calculated later
             key_topics=[]  # Will be extracted from transcript
         )
+        
+        # Store engagement metrics as additional attributes for quality evaluation
+        # These will be used by the quality evaluation node
+        video_data.__dict__.update({
+            'engagement_metrics': engagement_metrics,
+            'channel_subscriber_count': subscriber_count,
+            'content_details': video.get('contentDetails', {}),
+            'video_status': video.get('status', {})
+        })
+        
+        return video_data
     
     def _meets_discovery_criteria(self, video: VideoData, days_back: int = 7) -> bool:
         """
@@ -717,6 +1039,112 @@ class YouTubeClient:
         
         return total_score
     
+    def fetch_video_details_batch(self, video_data_list: List[VideoData]) -> List[VideoData]:
+        """
+        Fetch detailed metadata for a batch of VideoData objects.
+        
+        This is the main method used by the workflow for task 3.3 implementation.
+        It enhances VideoData objects with detailed metadata including:
+        - Complete engagement metrics (like-to-dislike ratio, view-to-subscriber ratio)
+        - Content details and video status information
+        - Graceful handling of missing or restricted video data
+        
+        Args:
+            video_data_list: List of VideoData objects to enhance with details
+            
+        Returns:
+            List of VideoData objects with enhanced metadata
+            
+        Raises:
+            RateLimitError: If API quota is exceeded
+            YouTubeAPIError: If details fetching fails
+        """
+        if not video_data_list:
+            logger.debug("No videos provided for details fetching")
+            return []
+        
+        logger.info(f"Fetching detailed metadata for {len(video_data_list)} videos")
+        
+        # Extract video IDs and channel IDs
+        video_ids = [video.video_id for video in video_data_list]
+        channel_ids = [getattr(video, 'channel_id', None) for video in video_data_list]
+        
+        # For videos that don't have channel_id stored, we'll need to get it from the API
+        # This is a fallback for videos that were created without full channel info
+        video_id_to_video_data = {video.video_id: video for video in video_data_list}
+        
+        try:
+            # Step 1: Get detailed video information
+            detailed_videos = self.get_video_details(video_ids)
+            
+            # Step 2: Extract channel IDs from detailed video data
+            all_channel_ids = []
+            video_id_to_channel_id = {}
+            
+            for video in detailed_videos:
+                video_id = video['id']
+                channel_id = video['snippet']['channelId']
+                video_id_to_channel_id[video_id] = channel_id
+                all_channel_ids.append(channel_id)
+            
+            # Step 3: Get channel information for engagement metrics
+            channel_info = self.get_channel_info(all_channel_ids)
+            
+            # Step 4: Update VideoData objects with enhanced details
+            enhanced_videos = []
+            
+            for video in detailed_videos:
+                video_id = video['id']
+                original_video_data = video_id_to_video_data.get(video_id)
+                
+                if not original_video_data:
+                    logger.warning(f"No original VideoData found for video {video_id}")
+                    continue
+                
+                try:
+                    # Convert to enhanced VideoData using the detailed information
+                    enhanced_video_data = self._convert_to_video_data(video, channel_info)
+                    
+                    # Preserve any existing data that shouldn't be overwritten
+                    if original_video_data.transcript:
+                        enhanced_video_data.transcript = original_video_data.transcript
+                    if original_video_data.quality_score is not None:
+                        enhanced_video_data.quality_score = original_video_data.quality_score
+                    if original_video_data.key_topics:
+                        enhanced_video_data.key_topics = original_video_data.key_topics
+                    
+                    enhanced_videos.append(enhanced_video_data)
+                    
+                    logger.debug(f"Enhanced video details for: {enhanced_video_data.title}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to enhance video {video_id}: {e}")
+                    # Keep original video data if enhancement fails
+                    enhanced_videos.append(original_video_data)
+            
+            # Step 5: Handle videos that weren't found in API response
+            enhanced_video_ids = {video.video_id for video in enhanced_videos}
+            missing_videos = [video for video in video_data_list if video.video_id not in enhanced_video_ids]
+            
+            if missing_videos:
+                logger.warning(f"Could not enhance {len(missing_videos)} videos (deleted, private, or restricted)")
+                for video in missing_videos:
+                    logger.debug(f"Missing video: {video.title} ({video.video_id})")
+                
+                # Add missing videos back to results (they may still be useful)
+                enhanced_videos.extend(missing_videos)
+            
+            success_count = len(enhanced_videos) - len(missing_videos)
+            logger.info(f"Video details enhancement complete: {success_count} enhanced, {len(missing_videos)} unchanged")
+            
+            return enhanced_videos
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch video details batch: {e}")
+            # Return original videos if enhancement fails completely
+            logger.warning("Returning original video data due to enhancement failure")
+            return video_data_list
+
     def get_quota_usage(self) -> Tuple[int, int]:
         """
         Get current quota usage.

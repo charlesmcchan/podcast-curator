@@ -18,6 +18,8 @@ class VideoData(BaseModel):
     This model stores both basic video information and processed data
     including quality scores and extracted topics.
     """
+    model_config = {"extra": "allow"}  # Allow extra attributes for enhanced metrics
+    
     video_id: str = Field(..., description="YouTube video ID")
     title: str = Field(..., description="Video title")
     channel: str = Field(..., description="Channel name")
@@ -62,6 +64,11 @@ class VideoData(BaseModel):
     
     def get_like_ratio(self) -> float:
         """Calculate like ratio as likes / (likes + estimated dislikes)."""
+        # Check if enhanced engagement metrics are available
+        if hasattr(self, 'engagement_metrics') and 'likeRatio' in self.engagement_metrics:
+            return self.engagement_metrics['likeRatio']
+        
+        # Fallback to simple estimation if enhanced metrics not available
         # Since dislikes are not available, estimate based on engagement patterns
         # Assume healthy videos have 95%+ like ratio
         if self.like_count == 0:
@@ -78,6 +85,61 @@ class VideoData(BaseModel):
             return days_old <= days_back
         except ValueError:
             return False
+    
+    def get_view_to_subscriber_ratio(self) -> float:
+        """Get view-to-subscriber ratio from enhanced engagement metrics."""
+        if hasattr(self, 'engagement_metrics') and 'viewToSubscriberRatio' in self.engagement_metrics:
+            return self.engagement_metrics['viewToSubscriberRatio']
+        return 0.0
+    
+    def get_engagement_score(self) -> float:
+        """Get overall engagement score (0-100) from enhanced metrics."""
+        if hasattr(self, 'engagement_metrics') and 'engagementScore' in self.engagement_metrics:
+            return self.engagement_metrics['engagementScore']
+        # Fallback calculation
+        return min(self.get_engagement_rate() * 1000, 100.0)
+    
+    def get_like_to_view_ratio(self) -> float:
+        """Get like-to-view ratio from enhanced engagement metrics."""
+        if hasattr(self, 'engagement_metrics') and 'likeToViewRatio' in self.engagement_metrics:
+            return self.engagement_metrics['likeToViewRatio']
+        # Fallback calculation
+        return self.like_count / self.view_count if self.view_count > 0 else 0.0
+    
+    def get_comment_to_view_ratio(self) -> float:
+        """Get comment-to-view ratio from enhanced engagement metrics."""
+        if hasattr(self, 'engagement_metrics') and 'commentToViewRatio' in self.engagement_metrics:
+            return self.engagement_metrics['commentToViewRatio']
+        # Fallback calculation
+        return self.comment_count / self.view_count if self.view_count > 0 else 0.0
+    
+    def has_enhanced_metrics(self) -> bool:
+        """Check if this video has enhanced engagement metrics from detailed fetching."""
+        return hasattr(self, 'engagement_metrics') and bool(self.engagement_metrics)
+    
+    def get_channel_subscriber_count(self) -> int:
+        """Get the subscriber count of the video's channel."""
+        if hasattr(self, 'channel_subscriber_count'):
+            return self.channel_subscriber_count
+        return 0
+    
+    def is_available_for_processing(self) -> bool:
+        """Check if video is available for processing based on status information."""
+        if not hasattr(self, 'video_status'):
+            return True  # Assume available if no status info
+        
+        status = self.video_status
+        privacy_status = status.get('privacyStatus', '')
+        upload_status = status.get('uploadStatus', '')
+        
+        # Check if video is public and processed
+        if privacy_status in ['private', 'privacyStatusUnspecified']:
+            return False
+        
+        if upload_status and upload_status not in ['processed', '']:
+            return False
+        
+        return True
 
 
 class CuratorState(BaseModel):
