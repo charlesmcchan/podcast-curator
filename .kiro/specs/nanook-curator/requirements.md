@@ -14,8 +14,8 @@ The nanook-curator is an AI-powered content curation system that automatically d
 
 1. WHEN the system runs a discovery process THEN it SHALL search for YouTube videos containing keywords related to AI news, tools, and agents
 2. WHEN evaluating videos THEN the system SHALL prioritize videos with trending status indicators (view count growth, recent upload date, engagement rate)
-3. WHEN filtering results THEN the system SHALL only include videos from the last 30 days to ensure content freshness
-4. IF a video has fewer than 1000 views OR is older than 30 days THEN the system SHALL exclude it from consideration
+3. WHEN filtering results THEN the system SHALL only include videos from the last 7 days to ensure content freshness for weekly podcast production
+4. IF a video has fewer than 1000 views OR is older than 7 days THEN the system SHALL exclude it from consideration
 
 ### Requirement 2
 
@@ -38,6 +38,7 @@ The nanook-curator is an AI-powered content curation system that automatically d
 2. WHEN assessing content quality THEN the system SHALL score videos based on transcript coherence, technical accuracy indicators, and information density
 3. IF a video has a like-to-dislike ratio below 80% THEN the system SHALL lower its quality score
 4. WHEN ranking videos THEN the system SHALL combine engagement metrics with content quality scores to create a final ranking
+5. IF fewer than 3 videos pass the quality evaluation threshold THEN the system SHALL return to video discovery with expanded search terms or relaxed criteria
 
 ### Requirement 4
 
