@@ -61,7 +61,7 @@
   - Extract main points and technical details from transcripts
   - _Requirements: 2.4, 3.2_
 
-- [ ] 5. Implement quality evaluation system
+- [x] 5. Implement quality evaluation system
 - [x] 5.1 Create engagement metrics analyzer
   - Implement like-to-dislike ratio calculation with 80% minimum threshold
   - Create comment sentiment analysis functionality
@@ -84,7 +84,7 @@
   - _Requirements: 3.4, 3.5_
 
 - [ ] 6. Implement search refinement system
-- [ ] 6.1 Create iterative search parameter refinement
+- [x] 6.1 Create iterative search parameter refinement
   - Implement progressive search strategy with 3 refinement attempts
   - Add keyword expansion with synonyms and related terms
   - Create date range expansion logic (7 days → 14 days as fallback)
