@@ -8,7 +8,7 @@ handling, validation, and default values for the nanook-curator system.
 import os
 from typing import List, Optional
 from pathlib import Path
-from pydantic import BaseModel, Field, validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, ValidationError, ConfigDict
 from dotenv import load_dotenv
 
 
@@ -53,13 +53,14 @@ class Configuration(BaseModel):
     debug: bool = Field(default=False, description="Enable debug mode")
     mock_apis: bool = Field(default=False, description="Use mock API responses for testing")
     
-    class Config:
-        """Pydantic configuration."""
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False
+    )
         
-    @validator('youtube_api_key')
+    @field_validator('youtube_api_key')
+    @classmethod
     def validate_youtube_api_key(cls, v):
         """Validate YouTube API key format."""
         if not v or v == "your_youtube_api_key_here":
@@ -68,7 +69,8 @@ class Configuration(BaseModel):
             raise ValueError("YouTube API key appears to be invalid (too short)")
         return v
     
-    @validator('openai_api_key')
+    @field_validator('openai_api_key')
+    @classmethod
     def validate_openai_api_key(cls, v):
         """Validate OpenAI API key format."""
         if not v or v == "your_openai_api_key_here":
@@ -77,14 +79,16 @@ class Configuration(BaseModel):
             raise ValueError("OpenAI API key must start with 'sk-' or 'sk-proj-'")
         return v
     
-    @validator('target_word_count_max')
-    def validate_word_count_range(cls, v, values):
+    @field_validator('target_word_count_max')
+    @classmethod
+    def validate_word_count_range(cls, v, info):
         """Ensure max word count is greater than min word count."""
-        if 'target_word_count_min' in values and v <= values['target_word_count_min']:
+        if info.data and 'target_word_count_min' in info.data and v <= info.data['target_word_count_min']:
             raise ValueError("Maximum word count must be greater than minimum word count")
         return v
     
-    @validator('log_level')
+    @field_validator('log_level')
+    @classmethod
     def validate_log_level(cls, v):
         """Validate log level is one of the standard levels."""
         valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
@@ -92,14 +96,16 @@ class Configuration(BaseModel):
             raise ValueError(f"Log level must be one of: {', '.join(valid_levels)}")
         return v.upper()
     
-    @validator('script_language')
+    @field_validator('script_language')
+    @classmethod
     def validate_language_code(cls, v):
         """Validate language code format (basic ISO 639-1 check)."""
         if len(v) != 2 or not v.isalpha():
             raise ValueError("Language code must be a 2-letter ISO 639-1 code (e.g., 'en', 'es')")
         return v.lower()
     
-    @validator('default_search_keywords')
+    @field_validator('default_search_keywords')
+    @classmethod
     def validate_search_keywords(cls, v):
         """Validate search keywords are not empty."""
         if not v or len(v) == 0:

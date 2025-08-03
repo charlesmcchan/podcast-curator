@@ -7,7 +7,7 @@ including video metadata and the state object that flows through the LangGraph n
 
 from typing import List, Dict, Optional, Any
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import re
 
 
@@ -31,7 +31,8 @@ class VideoData(BaseModel):
     quality_score: Optional[float] = Field(None, ge=0, le=100, description="Quality score (0-100)")
     key_topics: List[str] = Field(default_factory=list, description="Extracted key topics")
     
-    @validator('video_id')
+    @field_validator('video_id')
+    @classmethod
     def validate_video_id(cls, v):
         """Validate YouTube video ID format."""
         if not v or len(v) != 11:
@@ -40,7 +41,8 @@ class VideoData(BaseModel):
             raise ValueError('Video ID contains invalid characters')
         return v
     
-    @validator('upload_date')
+    @field_validator('upload_date')
+    @classmethod
     def validate_upload_date(cls, v):
         """Validate upload date format."""
         try:
@@ -49,7 +51,8 @@ class VideoData(BaseModel):
             raise ValueError('Upload date must be in ISO format')
         return v
     
-    @validator('title', 'channel')
+    @field_validator('title', 'channel')
+    @classmethod
     def validate_non_empty_strings(cls, v):
         """Ensure title and channel are not empty."""
         if not v or not v.strip():
@@ -173,7 +176,8 @@ class CuratorState(BaseModel):
     # Error handling
     errors: List[str] = Field(default_factory=list, description="List of errors encountered during processing")
     
-    @validator('search_keywords')
+    @field_validator('search_keywords')
+    @classmethod
     def validate_search_keywords(cls, v):
         """Ensure search keywords are not empty."""
         if not v:
@@ -184,11 +188,12 @@ class CuratorState(BaseModel):
             raise ValueError('Search keywords cannot be empty')
         return keywords
     
-    @validator('current_search_terms', pre=True, always=True)
-    def set_current_search_terms(cls, v, values):
+    @field_validator('current_search_terms', mode='before')
+    @classmethod
+    def set_current_search_terms(cls, v, info):
         """Initialize current_search_terms with search_keywords if empty."""
-        if not v and 'search_keywords' in values:
-            return values['search_keywords'].copy()
+        if not v and info.data and 'search_keywords' in info.data:
+            return info.data['search_keywords'].copy()
         return v
     
     def add_error(self, error: str, node_name: str = None) -> None:
