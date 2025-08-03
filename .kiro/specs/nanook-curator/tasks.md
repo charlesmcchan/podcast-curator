@@ -7,7 +7,7 @@
   - Create basic project configuration files (.env.example, .gitignore)
   - _Requirements: All requirements depend on proper project setup_
 
-- [ ] 2. Implement core data models and state management
+- [x] 2. Implement core data models and state management
 - [x] 2.1 Create VideoData and CuratorState models
   - Implement VideoData Pydantic model with all required fields (video_id, title, channel, view_count, like_count, comment_count, upload_date, transcript, quality_score, key_topics)
   - Implement CuratorState model with search parameters, processing state, iterative refinement state, and error handling
@@ -23,7 +23,7 @@
   - _Requirements: 5.1, 5.2_
 
 - [ ] 3. Implement YouTube API integration
-- [ ] 3.1 Create YouTube Data API client wrapper
+- [x] 3.1 Create YouTube Data API client wrapper
   - Implement YouTube API client with authentication and rate limiting
   - Create methods for video search with date filtering and trending indicators
   - Add error handling for API rate limits and authentication failures
@@ -31,7 +31,7 @@
   - Create src/nanook_curator/youtube_client.py file
   - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 3.2 Implement video discovery functionality
+- [x] 3.2 Implement video discovery functionality
   - Create video search function with keyword-based discovery
   - Implement 7-day date filtering for weekly podcast focus
   - Add trending status evaluation (view count growth, engagement rate)
