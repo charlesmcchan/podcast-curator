@@ -318,7 +318,13 @@ def handle_node_error(func):
 
 ## Packaging and Deployment
 
-- Dockerize the application for easy deployment
+### Python Dependency Management
+- Use `uv` for fast, reliable Python dependency management and virtual environment creation
+- Configure `pyproject.toml` with `uv` compatibility for modern Python packaging standards
+- Leverage `uv`'s speed advantages for development and deployment environments
+
+### Deployment Strategy
+- Dockerize the application for easy deployment with `uv` integration
 - Include a simple CLI interface for running the workflow
 - Use a configuration file for easy customization and future updates
 - Ensure the workflow is scalable and can handle multiple concurrent requests
