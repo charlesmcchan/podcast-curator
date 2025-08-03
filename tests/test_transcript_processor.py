@@ -14,6 +14,14 @@ from youtube_transcript_api._errors import (
 
 from src.nanook_curator.transcript_processor import TranscriptProcessor, fetch_transcripts_node
 from src.nanook_curator.models import VideoData, CuratorState
+from src.nanook_curator.config import Configuration
+
+
+def create_mock_config():
+    """Create a mock configuration for testing."""
+    mock_config = Mock(spec=Configuration)
+    mock_config.default_search_keywords = ["AI news", "AI tools", "AI agents", "artificial intelligence", "machine learning"]
+    return mock_config
 
 
 class TestTranscriptProcessor:
@@ -21,18 +29,19 @@ class TestTranscriptProcessor:
     
     def setup_method(self):
         """Set up test fixtures."""
-        self.processor = TranscriptProcessor()
+        # Create processor with mock config to avoid needing global config initialization
+        self.processor = TranscriptProcessor(config=create_mock_config())
         
     def test_init_default_languages(self):
         """Test processor initialization with default languages."""
-        processor = TranscriptProcessor()
+        processor = TranscriptProcessor(config=create_mock_config())
         assert processor.preferred_languages == ['en', 'en-US', 'en-GB', 'en-CA']
         assert processor.fallback_languages == ['en-auto', 'auto']
         
     def test_init_custom_languages(self):
         """Test processor initialization with custom languages."""
         custom_langs = ['es', 'fr']
-        processor = TranscriptProcessor(preferred_languages=custom_langs)
+        processor = TranscriptProcessor(preferred_languages=custom_langs, config=create_mock_config())
         assert processor.preferred_languages == custom_langs
         
     def test_clean_text_basic(self):
@@ -270,6 +279,44 @@ class TestTranscriptProcessor:
         assert stats['availability_rate'] == 2/3
         assert stats['total_words'] == 12  # 10 + 2 words
         assert stats['average_word_count'] == 6  # 12 / 2
+
+    def test_extract_key_topics_with_config(self):
+        """Test extract_key_topics uses configurable keywords when config is provided."""
+        # Create mock config with custom keywords
+        mock_config = Mock(spec=Configuration)
+        mock_config.default_search_keywords = ['python', 'programming', 'software']
+        
+        processor = TranscriptProcessor(config=mock_config)
+        
+        # Test transcript with custom keywords
+        transcript = "This is a great python tutorial about programming software applications"
+        topics = processor.extract_key_topics(transcript)
+        
+        # Should find our custom keywords
+        assert 'python' in topics
+        assert 'programming' in topics  
+        assert 'software' in topics
+        
+        # Should not find default AI keywords that aren't in our config
+        assert 'artificial intelligence' not in topics
+        assert 'machine learning' not in topics
+
+    @patch('src.nanook_curator.transcript_processor.get_config')
+    def test_extract_key_topics_without_config(self, mock_get_config):
+        """Test extract_key_topics uses default keywords from config when no config is provided."""
+        # Create mock config with default keywords (simulating config defaults)
+        mock_config = create_mock_config()
+        mock_get_config.return_value = mock_config
+        
+        processor = TranscriptProcessor()  # No config provided, will call get_config()
+        
+        # Test transcript with default keywords
+        transcript = "This video covers artificial intelligence and machine learning concepts"
+        topics = processor.extract_key_topics(transcript)
+        
+        # Should find keywords from config defaults
+        assert 'artificial intelligence' in topics
+        assert 'machine learning' in topics
 
 
 class TestFetchTranscriptsNode:

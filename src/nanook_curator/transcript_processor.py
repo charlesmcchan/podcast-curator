@@ -24,6 +24,7 @@ from youtube_transcript_api._errors import (
 )
 
 from .models import VideoData, CuratorState
+from .config import get_config, Configuration
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -37,16 +38,18 @@ class TranscriptProcessor:
     the text content, and handle various error conditions gracefully.
     """
     
-    def __init__(self, preferred_languages: List[str] = None):
+    def __init__(self, preferred_languages: List[str] = None, config: Optional[Configuration] = None):
         """
         Initialize the transcript processor.
         
         Args:
             preferred_languages: List of preferred language codes (e.g., ['en', 'en-US'])
                                 Defaults to English variants if not specified.
+            config: Optional configuration instance. If not provided, attempts to get global config.
         """
         self.preferred_languages = preferred_languages or ['en', 'en-US', 'en-GB', 'en-CA']
         self.fallback_languages = ['en-auto', 'auto']  # Auto-generated transcripts as fallback
+        self.config = config or get_config()
         
     def fetch_transcript(self, video_id: str) -> Optional[str]:
         """
@@ -215,30 +218,15 @@ class TranscriptProcessor:
         if not transcript:
             return []
         
-        # Define AI-related keywords and topics to look for
-        ai_keywords = {
-            'artificial intelligence', 'ai', 'machine learning', 'ml', 'deep learning',
-            'neural network', 'llm', 'large language model', 'gpt', 'chatgpt',
-            'openai', 'anthropic', 'claude', 'gemini', 'bard', 'transformer',
-            'natural language processing', 'nlp', 'computer vision', 'cv',
-            'reinforcement learning', 'rl', 'generative ai', 'automation',
-            'algorithm', 'model', 'training', 'inference', 'fine-tuning',
-            'prompt engineering', 'rag', 'retrieval augmented generation',
-            'vector database', 'embedding', 'tokenization', 'attention mechanism',
-            'diffusion model', 'stable diffusion', 'midjourney', 'dall-e',
-            'agent', 'ai agent', 'autonomous', 'robotics', 'computer science',
-            'data science', 'python', 'tensorflow', 'pytorch', 'hugging face',
-            'api', 'sdk', 'framework', 'library', 'tool', 'platform',
-            'startup', 'tech', 'innovation', 'breakthrough', 'research',
-            'paper', 'arxiv', 'conference', 'nips', 'icml', 'iclr'
-        }
+        # Get configurable keywords from user config
+        search_keywords = set(keyword.lower() for keyword in self.config.default_search_keywords)
         
         # Convert to lowercase for matching
         text_lower = transcript.lower()
         
-        # Find AI-related keywords
+        # Find keywords from user configuration
         found_topics = set()
-        for keyword in ai_keywords:
+        for keyword in search_keywords:
             if keyword in text_lower:
                 found_topics.add(keyword)
         
