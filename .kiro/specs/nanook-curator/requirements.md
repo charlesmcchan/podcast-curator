@@ -58,8 +58,7 @@ The nanook-curator is an AI-powered content curation system that automatically d
 
 #### Acceptance Criteria
 
-1. WHEN configured THEN the system SHALL run the complete curation process on a configurable schedule (daily, weekly, etc.)
-2. WHEN processing is complete THEN the system SHALL store generated podcast scripts with metadata including source videos, generation timestamp, and quality scores
-3. WHEN storing results THEN the system SHALL maintain a history of generated scripts and their performance metrics
-4. IF the system encounters errors during processing THEN it SHALL log detailed error information and continue with remaining videos
-5. WHEN multiple scripts are generated THEN the system SHALL provide a way to compare and select the best script based on quality metrics
+1. WHEN processing is complete THEN the system SHALL store generated podcast scripts with metadata including source videos, generation timestamp, and quality scores
+2. WHEN storing results THEN the system SHALL maintain a history of generated scripts and their performance metrics
+3. IF the system encounters errors during processing THEN it SHALL log detailed error information and continue with remaining videos
+4. WHEN multiple scripts are generated THEN the system SHALL provide a way to compare and select the best script based on quality metrics

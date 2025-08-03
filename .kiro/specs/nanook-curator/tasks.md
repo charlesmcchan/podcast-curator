@@ -140,10 +140,10 @@
 
 - [ ] 8.3 Add workflow error handling and recovery
   - Implement graceful degradation for missing transcripts and API failures
-  - Create comprehensive error logging to state.errors list
+  - Create comprehensive error logging to state.errors list with detailed context
   - Add retry mechanisms with exponential backoff
-  - Ensure non-blocking errors allow process continuation
-  - _Requirements: 5.4_
+  - Ensure non-blocking errors allow process continuation with remaining videos
+  - _Requirements: 5.3_
 
 - [ ] 9. Implement data persistence and storage
 - [ ] 9.1 Create results storage system
@@ -153,74 +153,60 @@
   - Store search refinement history for analysis
   - _Requirements: 5.2, 5.3_
 
-- [ ] 9.2 Add historical data management
+- [ ] 9.2 Add historical data management and script comparison
   - Implement script history maintenance with performance metrics
-  - Create comparison functionality for multiple generated scripts
+  - Create ScriptHistory model for storing multiple script versions
+  - Add script comparison functionality based on quality metrics
+  - Implement script selection algorithm for choosing best script from multiple options
   - Add data cleanup for old entries based on retention policy
-  - Implement script selection based on quality metrics
-  - _Requirements: 5.3, 5.5_
+  - _Requirements: 5.2, 5.4_
 
-- [ ] 10. Implement scheduling and automation
-- [ ] 10.1 Create configurable scheduling system
-  - Implement cron-like scheduling for automated execution
-  - Add configuration options for daily/weekly/custom schedules
-  - Create scheduling state management and persistence
-  - Implement schedule validation and error handling
-  - _Requirements: 5.1_
-
-- [ ] 10.2 Add automated execution and monitoring
-  - Create main execution loop with scheduling integration
-  - Implement process monitoring and health checks
-  - Add logging for scheduled executions and failures
-  - Create notification system for successful/failed runs
-  - _Requirements: 5.1, 5.4_
-
-- [ ] 11. Create CLI interface and configuration
-- [ ] 11.1 Implement command-line interface
+- [ ] 10. Create CLI interface and configuration
+- [ ] 10.1 Implement command-line interface
   - Create CLI commands for manual execution and configuration
   - Add options for one-time runs vs scheduled execution
   - Implement configuration file management through CLI
   - Add verbose logging and debug options
   - _Requirements: 5.1_
 
-- [ ] 11.2 Add testing and validation commands
+- [ ] 10.2 Add testing and validation commands
   - Create CLI commands for testing API connections
   - Implement dry-run mode for workflow validation
   - Add configuration validation commands
   - Create sample data testing functionality
   - _Requirements: All requirements for validation_
 
-- [ ] 12. Implement comprehensive testing suite
-- [ ] 12.1 Create unit tests for core components
+- [ ] 11. Implement comprehensive testing suite
+- [ ] 11.1 Create unit tests for core components
   - Write tests for VideoData and CuratorState models with validation
   - Create mock YouTube API responses for consistent testing
   - Test quality evaluation algorithms with known datasets
   - Implement transcript processing and analysis tests
   - _Requirements: All requirements need testing coverage_
 
-- [ ] 12.2 Create integration tests for LangGraph workflow
+- [ ] 11.2 Create integration tests for LangGraph workflow
   - Test complete workflow execution with sample data
   - Validate parallel processing and state merging
   - Test iterative refinement loops with various failure scenarios
   - Verify error handling and recovery mechanisms
   - _Requirements: All requirements integrated through workflow testing_
 
-- [ ] 12.3 Add end-to-end testing with live APIs
+- [ ] 11.3 Add end-to-end testing with live APIs
   - Create rate-limited tests with real YouTube API
   - Test generated podcast script quality assessment
-  - Validate scheduling and automated execution
+  - Validate container execution and CLI interface testing
   - Add performance benchmarking for processing time
   - _Requirements: 1.1, 2.1, 4.1, 5.1_
 
-- [ ] 13. Create documentation and deployment setup
-- [ ] 13.1 Create comprehensive documentation
+- [ ] 12. Create documentation and deployment setup
+- [ ] 12.1 Create comprehensive documentation
   - Write README with setup instructions and usage examples
   - Document configuration options and API requirements
   - Create troubleshooting guide for common issues
   - Add examples of generated podcast scripts
   - _Requirements: All requirements need documentation_
 
-- [ ] 13.2 Implement containerization and deployment
+- [ ] 12.2 Implement containerization and deployment
   - Create Dockerfile for easy deployment
   - Add docker-compose for development environment
   - Create deployment scripts and configuration templates

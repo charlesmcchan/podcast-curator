@@ -7,7 +7,7 @@ The nanook-curator is an AI-powered content curation system built using LangGrap
 This LangGraph implementation demonstrates both parallel processing and conditional routing patterns while maintaining beginner-friendly clarity. The parallel processing of video details and transcripts reduces processing time by ~50% while LangGraph's state management ensures data consistency. The iterative refinement loops ensure robust content discovery by automatically refining search parameters when results don't meet quality thresholds. The weekly focus supports consistent podcast production, and the state-driven approach with conditional edges makes the system both predictable and adaptive to content availability.
 
 **Key Design Principles:**
-- **Automated Scheduling**: Designed to run automatically on configurable schedules for continuous content generation
+- **Containerized Execution**: Designed as a packaged container for external scheduling and execution
 - **Quality-First Curation**: Prioritizes high-quality content through multi-metric evaluation and quality thresholds
 - **Weekly Focus**: Optimized for weekly podcast production with 7-day content freshness requirements
 - **Parallel Processing**: Video fetching and transcript analysis run concurrently for efficiency
@@ -312,7 +312,7 @@ def handle_node_error(func):
 **End-to-End Testing**:
 - Live YouTube API testing (rate-limited) with real content
 - Generated podcast script quality assessment
-- Weekly scheduling and automated execution testing
+- Container execution and CLI interface testing
 
 **Test Data**: Predefined VideoData objects, real transcript samples, and saved API response fixtures enable offline testing while maintaining realistic data patterns.
 
@@ -324,10 +324,12 @@ def handle_node_error(func):
 - Leverage `uv`'s speed advantages for development and deployment environments
 
 ### Deployment Strategy
-- Dockerize the application for easy deployment with `uv` integration
-- Include a simple CLI interface for running the workflow
-- Use a configuration file for easy customization and future updates
-- Ensure the workflow is scalable and can handle multiple concurrent requests
+- **Containerized deployment**: Package as Docker container for external scheduling systems
+- **Single execution model**: Designed for one-time execution per container run, not continuous operation
+- **CLI interface**: Simple command-line interface for manual execution and configuration
+- **External scheduling**: Periodic execution handled by external systems (cron, Kubernetes CronJob, etc.)
+- **Configuration management**: Environment-based configuration for different deployment contexts
+- **Stateless design**: Each execution is independent, with results persisted to external storage
 
 ## LangGraph Implementation Details
 
