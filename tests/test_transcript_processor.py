@@ -308,4 +308,4 @@ class TestFetchTranscriptsNode:
         result_state = fetch_transcripts_node(state)
         
         assert len(result_state.errors) > 0
-        assert "Critical error in transcript fetching node" in result_state.errors[0]
+        assert "Critical error in transcript fetching and analysis node" in result_state.errors[0]
