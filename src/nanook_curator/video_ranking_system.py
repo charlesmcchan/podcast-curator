@@ -87,8 +87,8 @@ class VideoRankingSystem:
         
         # Ranking configuration
         self.default_strategy = RankingStrategy.BALANCED
-        self.quality_threshold = 70.0  # Default 70% threshold as per requirements
-        self.min_quality_videos = 3  # Minimum 3 videos above threshold as per requirements
+        self.quality_threshold = getattr(self.config, 'quality_threshold', 70.0)
+        self.min_quality_videos = getattr(self.config, 'min_quality_videos', 3)
         
         # Scoring weights for different strategies
         self.strategy_weights = {

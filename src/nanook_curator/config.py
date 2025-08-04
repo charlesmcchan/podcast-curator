@@ -53,6 +53,10 @@ class Configuration(BaseModel):
     debug: bool = Field(default=False, description="Enable debug mode")
     mock_apis: bool = Field(default=False, description="Use mock API responses for testing")
     
+    # Proxy Configuration
+    proxy_username: Optional[str] = Field(default=None, description="Proxy username for transcript fetching")
+    proxy_password: Optional[str] = Field(default=None, description="Proxy password for transcript fetching")
+    
     model_config = ConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -149,6 +153,8 @@ class Configuration(BaseModel):
             'log_file': 'LOG_FILE',
             'debug': 'DEBUG',
             'mock_apis': 'MOCK_APIS',
+            'proxy_username': 'PROXY_USERNAME',
+            'proxy_password': 'PROXY_PASSWORD',
         }
         
         env_data = {}

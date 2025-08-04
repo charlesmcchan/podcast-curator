@@ -7,10 +7,13 @@ using the youtube-transcript-api library with robust error handling and fallback
 
 import logging
 import re
+import time
+import random
 from typing import List, Optional, Dict, Any, Set, Tuple
 from collections import Counter
 import math
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.proxies import WebshareProxyConfig
 from youtube_transcript_api._errors import (
     TranscriptsDisabled,
     NoTranscriptFound,
@@ -51,9 +54,78 @@ class TranscriptProcessor:
         self.fallback_languages = ['en-auto', 'auto']  # Auto-generated transcripts as fallback
         self.config = config or get_config()
         
-    def fetch_transcript(self, video_id: str) -> Optional[str]:
+        # User agents to rotate through to appear less bot-like
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+        ]
+        self.current_user_agent_index = 0
+        
+        # Initialize YouTube API with proxy config from configuration
+        if self.config.proxy_username and self.config.proxy_password:
+            self.youtube_api = YouTubeTranscriptApi(
+                proxy_config=WebshareProxyConfig(
+                    proxy_username=self.config.proxy_username,
+                    proxy_password=self.config.proxy_password,
+                )
+            )
+        else:
+            # Use without proxy if credentials not provided
+            self.youtube_api = YouTubeTranscriptApi()
+
+    def _rotate_user_agent(self):
+        """Rotate to the next user agent to appear less bot-like."""
+        self.current_user_agent_index = (self.current_user_agent_index + 1) % len(self.user_agents)
+        # Note: YouTubeTranscriptApi doesn't directly support user agent changes
+        # This is mainly for future extensibility if we need to add custom headers
+        return self.user_agents[self.current_user_agent_index]
+        
+    def fetch_transcript(self, video_id: str, max_retries: int = 3) -> Optional[str]:
         """
-        Fetch transcript for a single video with comprehensive error handling.
+        Fetch transcript for a single video with comprehensive error handling and retry logic.
+        
+        Args:
+            video_id: YouTube video ID
+            max_retries: Maximum number of retries for IP blocking
+            
+        Returns:
+            Cleaned transcript text or None if unavailable
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    # Exponential backoff with jitter
+                    delay = (2 ** attempt) + random.uniform(0.5, 2.0)
+                    # Rotate user agent on retry (for future extensibility)
+                    user_agent = self._rotate_user_agent()
+                    logger.debug(f"Retry {attempt} for {video_id}, waiting {delay:.1f}s with new user agent")
+                    time.sleep(delay)
+                
+                return self._fetch_transcript_attempt(video_id)
+                
+            except (YouTubeRequestFailed, CouldNotRetrieveTranscript) as e:
+                if "blocking" in str(e).lower() or "ip" in str(e).lower():
+                    if attempt < max_retries:
+                        logger.warning(f"IP blocking detected for {video_id}, retrying ({attempt+1}/{max_retries})")
+                        continue
+                    else:
+                        logger.error(f"Failed to fetch transcript for {video_id} after {max_retries} retries: IP blocked")
+                        return None
+                else:
+                    # Non-blocking error, don't retry
+                    logger.warning(f"Non-retryable error for {video_id}: {e}")
+                    return None
+            except Exception as e:
+                logger.error(f"Unexpected error fetching transcript for {video_id}: {e}")
+                return None
+        
+        return None
+    
+    def _fetch_transcript_attempt(self, video_id: str) -> Optional[str]:
+        """
+        Single attempt to fetch transcript without retry logic.
         
         Args:
             video_id: YouTube video ID
@@ -63,7 +135,7 @@ class TranscriptProcessor:
         """
         try:
             # First, try to get manually created transcripts in preferred languages
-            transcript_list = YouTubeTranscriptApi.list(video_id)
+            transcript_list = self.youtube_api.list(video_id)
             
             # Try preferred languages first (manually created)
             for lang in self.preferred_languages:
@@ -119,12 +191,12 @@ class TranscriptProcessor:
         except VideoUnavailable:
             logger.warning(f"Video {video_id} is unavailable")
             return None
-        except YouTubeRequestFailed:
-            logger.error(f"YouTube request failed when fetching transcript for {video_id}")
-            return None
-        except CouldNotRetrieveTranscript:
-            logger.warning(f"Could not retrieve transcript for video {video_id}")
-            return None
+        except YouTubeRequestFailed as e:
+            # Re-raise for retry logic to handle
+            raise e
+        except CouldNotRetrieveTranscript as e:
+            # Re-raise for retry logic to handle
+            raise e
         except (CookiePathInvalid, FailedToCreateConsentCookie) as e:
             logger.error(f"Cookie-related error for video {video_id}: {e}")
             return None
@@ -148,7 +220,11 @@ class TranscriptProcessor:
         # Extract text from transcript segments
         text_segments = []
         for segment in raw_transcript:
-            text = segment.get('text', '').strip()
+            # Handle both old dict format and new FetchedTranscriptSnippet objects
+            if hasattr(segment, 'text'):
+                text = segment.text.strip()
+            else:
+                text = segment.get('text', '').strip()
             if text:
                 text_segments.append(text)
         

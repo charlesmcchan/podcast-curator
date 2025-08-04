@@ -5,10 +5,39 @@ This module defines the core data structures used throughout the curation workfl
 including video metadata and the state object that flows through the LangGraph nodes.
 """
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Annotated
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 import re
+import operator
+
+
+def _replace_value(left, right):
+    """
+    Reducer that safely replaces values while preserving state object integrity.
+    
+    This handles LangGraph's state management during transitions and ensures
+    we always maintain CuratorState objects, not dictionaries.
+    """
+    # If right is None, keep the left value
+    if right is None:
+        return left
+    
+    # If both are the same, no change needed
+    if left == right:
+        return left
+    
+    # For scalar values, just return the new value
+    if not isinstance(right, (dict, list)):
+        return right
+    
+    # If right is a dictionary but left isn't, this might be a partial update
+    # In this case, preserve the left value to maintain state integrity
+    if isinstance(right, dict) and not isinstance(left, dict):
+        return left
+        
+    # Otherwise, return the right value
+    return right
 
 
 class VideoData(BaseModel):
@@ -153,28 +182,28 @@ class CuratorState(BaseModel):
     including search parameters, processing state, and results.
     """
     # Input parameters
-    search_keywords: List[str] = Field(..., description="Keywords for video discovery")
-    max_videos: int = Field(default=10, ge=1, le=50, description="Maximum videos to discover")
-    days_back: int = Field(default=7, ge=1, le=30, description="Days back to search for videos")
+    search_keywords: Annotated[List[str], operator.add] = Field(..., description="Keywords for video discovery")
+    max_videos: Annotated[int, _replace_value] = Field(default=10, ge=1, le=50, description="Maximum videos to discover")
+    days_back: Annotated[int, _replace_value] = Field(default=7, ge=1, le=30, description="Days back to search for videos")
     
     # Processing state
-    discovered_videos: List[VideoData] = Field(default_factory=list, description="Videos found during discovery")
-    processed_videos: List[VideoData] = Field(default_factory=list, description="Videos after quality evaluation")
-    ranked_videos: List[VideoData] = Field(default_factory=list, description="Top-ranked videos for script generation")
+    discovered_videos: Annotated[List[VideoData], operator.add] = Field(default_factory=list, description="Videos found during discovery")
+    processed_videos: Annotated[List[VideoData], operator.add] = Field(default_factory=list, description="Videos after quality evaluation")
+    ranked_videos: Annotated[List[VideoData], operator.add] = Field(default_factory=list, description="Top-ranked videos for script generation")
     
     # Iterative refinement state
-    search_attempt: int = Field(default=0, ge=0, description="Current search attempt number")
-    max_search_attempts: int = Field(default=3, ge=1, le=10, description="Maximum search refinement attempts")
-    current_search_terms: List[str] = Field(default_factory=list, description="Current search terms being used")
-    quality_threshold: float = Field(default=70.0, ge=0, le=100, description="Minimum quality score threshold")
-    min_quality_videos: int = Field(default=3, ge=1, description="Minimum number of quality videos required")
+    search_attempt: Annotated[int, _replace_value] = Field(default=0, ge=0, description="Current search attempt number")
+    max_search_attempts: Annotated[int, _replace_value] = Field(default=3, ge=1, le=10, description="Maximum search refinement attempts")
+    current_search_terms: Annotated[List[str], operator.add] = Field(default_factory=list, description="Current search terms being used")
+    quality_threshold: Annotated[float, _replace_value] = Field(default=70.0, ge=0, le=100, description="Minimum quality score threshold")
+    min_quality_videos: Annotated[int, _replace_value] = Field(default=3, ge=1, description="Minimum number of quality videos required")
     
     # Output
-    podcast_script: Optional[str] = Field(None, description="Generated podcast script")
-    generation_metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata about script generation")
+    podcast_script: Annotated[Optional[str], _replace_value] = Field(None, description="Generated podcast script")
+    generation_metadata: Annotated[Dict[str, Any], _replace_value] = Field(default_factory=dict, description="Metadata about script generation")
     
     # Error handling
-    errors: List[str] = Field(default_factory=list, description="List of errors encountered during processing")
+    errors: Annotated[List[str], operator.add] = Field(default_factory=list, description="List of errors encountered during processing")
     
     @field_validator('search_keywords')
     @classmethod

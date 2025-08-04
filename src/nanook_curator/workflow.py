@@ -7,6 +7,7 @@ and iterative search refinement with parallel processing capabilities.
 """
 
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from functools import wraps
 from datetime import datetime
@@ -232,15 +233,21 @@ def fetch_transcripts_node(state: CuratorState) -> CuratorState:
     videos_with_transcripts = 0
     transcript_errors = []
     
-    for video in state.discovered_videos:
+    for i, video in enumerate(state.discovered_videos):
         try:
+            # Add delay between requests to avoid YouTube rate limiting
+            if i > 0:  # Skip delay for first video
+                delay = min(2.0 + (i * 0.5), 10.0)  # Progressive delay, max 10 seconds
+                logger.debug(f"Adding {delay}s delay before fetching transcript for {video.video_id}")
+                time.sleep(delay)
+            
             # Apply transcript-specific error handling with retry
             @handle_transcript_errors
             @handle_api_errors("transcript_fetch", video_id=video.video_id, retry_config=RetryConfig(max_attempts=2, base_delay=0.5))
-            def fetch_with_retry():
-                return transcript_processor.fetch_transcript(video.video_id)
+            def fetch_with_retry(video_id):
+                return transcript_processor.fetch_transcript(video_id)
             
-            transcript = fetch_with_retry()
+            transcript = fetch_with_retry(video.video_id)
             
             if transcript and transcript.strip():
                 video.transcript = transcript
@@ -470,6 +477,10 @@ def rank_videos_node(state: CuratorState) -> CuratorState:
     ranking_system = VideoRankingSystem(config)
     
     logger.info(f"Ranking {len(state.processed_videos)} processed videos")
+    
+    # Update ranking system with current state values
+    ranking_system.quality_threshold = state.quality_threshold
+    ranking_system.min_quality_videos = state.min_quality_videos
     
     # Perform comprehensive video ranking
     ranking_result = ranking_system.rank_videos(
@@ -738,15 +749,81 @@ def store_results_node(state: CuratorState) -> CuratorState:
         logger.error(f"Error updating generation metadata: {e}")
         state.add_error(f"Metadata update failed: {str(e)}", "store_results")
     
-    # In a real implementation, this would save to a database or file system
-    # For now, we just log the successful storage
+    # Save results to files in the configured storage directory
     try:
+        config = get_config()
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        # Ensure storage directory exists
+        storage_path = config.results_storage_path
+        storage_path.mkdir(parents=True, exist_ok=True)
+        
+        # Save the podcast script if available
+        if state.podcast_script:
+            script_file = storage_path / f"script_{timestamp}.txt"
+            script_file.write_text(state.podcast_script, encoding='utf-8')
+            logger.info(f"Script saved to: {script_file}")
+        
+        # Save metadata as JSON
+        metadata_file = storage_path / f"metadata_{timestamp}.json"
+        metadata_content = {
+            'timestamp': timestamp,
+            'search_keywords': state.search_keywords,
+            'search_attempt': state.search_attempt,
+            'videos_discovered': len(state.discovered_videos),
+            'videos_processed': len(state.processed_videos),
+            'videos_ranked': len(state.ranked_videos),
+            'quality_threshold': state.quality_threshold,
+            'min_quality_videos': state.min_quality_videos,
+            'generation_metadata': state.generation_metadata,
+            'errors': state.errors,
+            'storage_metadata': storage_metadata
+        }
+        
+        import json
+        metadata_file.write_text(json.dumps(metadata_content, indent=2, default=str), encoding='utf-8')
+        logger.info(f"Metadata saved to: {metadata_file}")
+        
+        # Save video data as JSON for reference
+        video_data_file = storage_path / f"videos_{timestamp}.json"
+        videos_data = [
+            {
+                'video_id': v.video_id,
+                'title': v.title,
+                'channel': v.channel,
+                'upload_date': v.upload_date,
+                'view_count': v.view_count,
+                'like_count': v.like_count,
+                'comment_count': v.comment_count,
+                'quality_score': v.quality_score,
+                'has_transcript': bool(v.transcript)
+            }
+            for v in state.ranked_videos
+        ]
+        
+        video_data_file.write_text(json.dumps(videos_data, indent=2, default=str), encoding='utf-8')
+        logger.info(f"Video data saved to: {video_data_file}")
+        
         script_word_count = storage_metadata.get('script_metadata', {}).get('word_count', 0)
         source_video_count = storage_metadata.get('script_metadata', {}).get('source_video_count', 0)
         
         logger.info(f"Results stored successfully: script with {script_word_count} words, "
-                   f"{source_video_count} source videos")
+                   f"{source_video_count} source videos, saved to {storage_path}")
         
+    except Exception as e:
+        logger.error(f"Error saving results to file system: {e}")
+        state.add_error(f"File storage failed: {str(e)}", "store_results")
+        
+        # Still log summary even if file saving failed
+        try:
+            script_word_count = storage_metadata.get('script_metadata', {}).get('word_count', 0)
+            source_video_count = storage_metadata.get('script_metadata', {}).get('source_video_count', 0)
+            logger.info(f"Results processed (storage failed): script with {script_word_count} words, "
+                       f"{source_video_count} source videos")
+        except Exception:
+            logger.info("Results processed but storage and summary failed")
+    
+    try:
         # Log final processing summary
         summary = state.get_processing_summary()
         logger.info(f"Workflow complete - Final summary: {summary}")
@@ -895,26 +972,6 @@ def _fallback_search_refinement(state: CuratorState) -> CuratorState:
     state.add_error("Used fallback search refinement due to engine failure", "refine_search")
     
     return state
-
-
-# Conditional routing functions
-def should_start_parallel_processing(state: CuratorState) -> str:
-    """
-    Determine if we should start parallel processing or skip to evaluation.
-    
-    Args:
-        state: Current curator state
-        
-    Returns:
-        Next node name ("start_parallel" or "evaluate_quality")
-    """
-    if state.discovered_videos:
-        logger.info("Starting parallel processing for video details and transcripts")
-        return "start_parallel"
-    else:
-        logger.warning("No videos discovered, skipping to evaluation")
-        return "evaluate_quality"
-
 
 def should_refine_search(state: CuratorState) -> str:
     """

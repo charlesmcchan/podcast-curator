@@ -212,3 +212,7 @@
   - Create deployment scripts and configuration templates
   - Implement environment-specific configuration management
   - _Requirements: 5.1 for automated deployment_
+
+- [ ] 13. Improvements
+  - Make OpenAI model configurable
+  
