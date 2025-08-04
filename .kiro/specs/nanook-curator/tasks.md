@@ -98,7 +98,7 @@
   - Ensure weekly focus is maintained during refinement
   - _Requirements: 3.5, 1.3_
 
-- [ ] 7. Implement podcast script generation
+- [x] 7. Implement podcast script generation
 - [x] 7.1 Create OpenAI integration for script generation
   - Implement OpenAI API client with authentication
   - Create prompt templates for podcast script generation
@@ -121,7 +121,7 @@
   - _Requirements: 4.5_
 
 - [ ] 8. Implement LangGraph workflow orchestration
-- [ ] 8.1 Create LangGraph nodes for each processing step
+- [x] 8.1 Create LangGraph nodes for each processing step
   - Implement discover_videos_node with state management
   - Create fetch_video_details_node and fetch_transcripts_node for parallel processing
   - Implement evaluate_quality_node and rank_videos_node
