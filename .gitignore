@@ -53,6 +53,7 @@ logs/
 *.log
 temp/
 cache/
+output/
 
 # Testing
 .coverage
