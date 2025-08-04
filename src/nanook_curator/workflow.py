@@ -12,7 +12,6 @@ from functools import wraps
 from datetime import datetime
 
 from langgraph.graph import StateGraph, END
-from langgraph.graph.graph import CompiledGraph
 
 from .models import VideoData, CuratorState
 from .config import get_config, Configuration
@@ -551,6 +550,24 @@ def refine_search_node(state: CuratorState) -> CuratorState:
 
 
 # Conditional routing functions
+def should_start_parallel_processing(state: CuratorState) -> str:
+    """
+    Determine if we should start parallel processing or skip to evaluation.
+    
+    Args:
+        state: Current curator state
+        
+    Returns:
+        Next node name ("start_parallel" or "evaluate_quality")
+    """
+    if state.discovered_videos:
+        logger.info("Starting parallel processing for video details and transcripts")
+        return "start_parallel"
+    else:
+        logger.warning("No videos discovered, skipping to evaluation")
+        return "evaluate_quality"
+
+
 def should_refine_search(state: CuratorState) -> str:
     """
     Determine if search refinement is needed based on discovery results.
@@ -559,7 +576,7 @@ def should_refine_search(state: CuratorState) -> str:
         state: Current curator state
         
     Returns:
-        Next node name ("refine_search" or "fetch_details")
+        Next node name ("refine_search" or "parallel_processing")
     """
     # Check if we have any videos
     if not state.discovered_videos:
@@ -568,7 +585,7 @@ def should_refine_search(state: CuratorState) -> str:
             return "refine_search"
         else:
             logger.warning("No videos found and max refinement attempts reached")
-            return "fetch_details"  # Continue with empty results
+            return "parallel_processing"  # Continue with empty results
     
     # Check if we have enough videos for quality assessment
     min_videos_for_processing = 3
@@ -580,8 +597,8 @@ def should_refine_search(state: CuratorState) -> str:
         else:
             logger.warning(f"Only {len(state.discovered_videos)} videos found but max refinement attempts reached")
     
-    logger.info(f"Sufficient videos found ({len(state.discovered_videos)}), proceeding to processing")
-    return "fetch_details"
+    logger.info(f"Sufficient videos found ({len(state.discovered_videos)}), proceeding to parallel processing")
+    return "parallel_processing"
 
 
 def should_refine_after_ranking(state: CuratorState) -> str:
@@ -609,7 +626,7 @@ def should_refine_after_ranking(state: CuratorState) -> str:
         return "generate_script"
 
 
-def create_curator_workflow(config: Optional[Configuration] = None) -> CompiledGraph:
+def create_curator_workflow(config: Optional[Configuration] = None):
     """
     Create the complete LangGraph workflow for the nanook-curator system.
     
@@ -624,10 +641,10 @@ def create_curator_workflow(config: Optional[Configuration] = None) -> CompiledG
     """
     logger.info("Creating nanook-curator LangGraph workflow")
     
-    # Create the state graph
+    # Create the state graph with CuratorState schema
     workflow = StateGraph(CuratorState)
     
-    # Add all processing nodes
+    # Add all processing nodes with error handling decorators already applied
     workflow.add_node("discover_videos", discover_videos_node)
     workflow.add_node("refine_search", refine_search_node)
     workflow.add_node("fetch_details", fetch_video_details_node)
@@ -640,30 +657,33 @@ def create_curator_workflow(config: Optional[Configuration] = None) -> CompiledG
     # Set entry point
     workflow.set_entry_point("discover_videos")
     
-    # Add conditional routing after discovery
+    # Conditional edges for discovery success/failure routing
     workflow.add_conditional_edges(
         "discover_videos",
         should_refine_search,
         {
             "refine_search": "refine_search",
-            "fetch_details": "fetch_details"
+            "parallel_processing": "fetch_details"
         }
     )
     
-    # Refinement loop - goes back to discovery
+    # Refinement loop - goes back to discovery after search parameter adjustment
     workflow.add_edge("refine_search", "discover_videos")
     
-    # Parallel processing after successful discovery
-    workflow.add_edge("fetch_details", "evaluate_quality")
-    workflow.add_edge("fetch_transcripts", "evaluate_quality")
+    # Add parallel processing edges for video details and transcript fetching
+    # When fetch_details is reached (successful discovery), also trigger fetch_transcripts
+    # This creates parallel execution of both nodes
+    workflow.add_edge("fetch_details", "fetch_transcripts")
     
-    # Start both parallel processes from discovery
-    workflow.add_edge("discover_videos", "fetch_transcripts")
+    # Both parallel processes feed into quality evaluation
+    # LangGraph will wait for both to complete before proceeding to evaluate_quality
+    workflow.add_edge("fetch_details", "evaluate_quality") 
+    workflow.add_edge("fetch_transcripts", "evaluate_quality")
     
     # Sequential processing after parallel completion
     workflow.add_edge("evaluate_quality", "rank_videos")
     
-    # Conditional routing after ranking (quality-based refinement)
+    # Quality-based conditional routing for refinement loops
     workflow.add_conditional_edges(
         "rank_videos",
         should_refine_after_ranking,

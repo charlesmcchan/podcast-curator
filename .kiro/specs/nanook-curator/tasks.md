@@ -130,7 +130,7 @@
   - Create src/nanook_curator/workflow.py file
   - _Requirements: All requirements integrated through workflow_
 
-- [ ] 8.2 Implement LangGraph state flow and conditional routing
+- [x] 8.2 Implement LangGraph state flow and conditional routing
   - Create StateGraph with CuratorState schema
   - Implement conditional edges for discovery success/failure routing
   - Add parallel processing edges for video details and transcript fetching
