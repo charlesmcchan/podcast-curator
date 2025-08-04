@@ -145,7 +145,7 @@
   - Ensure non-blocking errors allow process continuation with remaining videos
   - _Requirements: 5.3_
 
-- [~] 9. Implement data persistence and storage (SKIPPED - Non-functional infrastructure)
+- [~] 9. Implement data persistence and storage (SKIPPED - advanced feature)
 - [~] 9.1 Create results storage system
   - Implement podcast script storage with metadata
   - Create storage for video source information and quality scores
@@ -169,7 +169,7 @@
   - Add verbose logging and debug options
   - _Requirements: 5.1_
 
-- [ ] 10.2 Add testing and validation commands
+- [x] 10.2 Add testing and validation commands
   - Create CLI commands for testing API connections
   - Implement dry-run mode for workflow validation
   - Add configuration validation commands
