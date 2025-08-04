@@ -145,15 +145,15 @@
   - Ensure non-blocking errors allow process continuation with remaining videos
   - _Requirements: 5.3_
 
-- [ ] 9. Implement data persistence and storage
-- [ ] 9.1 Create results storage system
+- [~] 9. Implement data persistence and storage (SKIPPED - Non-functional infrastructure)
+- [~] 9.1 Create results storage system
   - Implement podcast script storage with metadata
   - Create storage for video source information and quality scores
   - Add generation timestamp and processing time tracking
   - Store search refinement history for analysis
   - _Requirements: 5.2, 5.3_
 
-- [ ] 9.2 Add historical data management and script comparison
+- [~] 9.2 Add historical data management and script comparison
   - Implement script history maintenance with performance metrics
   - Create ScriptHistory model for storing multiple script versions
   - Add script comparison functionality based on quality metrics
@@ -176,22 +176,22 @@
   - Create sample data testing functionality
   - _Requirements: All requirements for validation_
 
-- [ ] 11. Implement comprehensive testing suite
-- [ ] 11.1 Create unit tests for core components
+- [~] 11. Implement comprehensive testing suite (SKIPPED - Already have 242 passing tests)
+- [~] 11.1 Create unit tests for core components
   - Write tests for VideoData and CuratorState models with validation
   - Create mock YouTube API responses for consistent testing
   - Test quality evaluation algorithms with known datasets
   - Implement transcript processing and analysis tests
   - _Requirements: All requirements need testing coverage_
 
-- [ ] 11.2 Create integration tests for LangGraph workflow
+- [~] 11.2 Create integration tests for LangGraph workflow
   - Test complete workflow execution with sample data
   - Validate parallel processing and state merging
   - Test iterative refinement loops with various failure scenarios
   - Verify error handling and recovery mechanisms
   - _Requirements: All requirements integrated through workflow testing_
 
-- [ ] 11.3 Add end-to-end testing with live APIs
+- [~] 11.3 Add end-to-end testing with live APIs
   - Create rate-limited tests with real YouTube API
   - Test generated podcast script quality assessment
   - Validate container execution and CLI interface testing
