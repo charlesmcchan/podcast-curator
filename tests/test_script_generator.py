@@ -504,6 +504,200 @@ class TestScriptSynthesis:
         assert synthesis_quality["structure_score"] > 0.8
 
 
+class TestAutomaticLengthManagement:
+    """Test automatic script length management functionality."""
+    
+    def test_script_within_limit_no_trimming(self, script_generator, sample_videos):
+        """Test that scripts within 10-minute limit are not trimmed."""
+        # Create a script that's within the 10-minute limit (~1550 words)
+        normal_script = " ".join(["word"] * 1000)  # 1000 words, ~6.5 minutes
+        
+        with patch.object(script_generator, '_generate_with_retry') as mock_generate:
+            mock_generate.return_value = normal_script
+            
+            request = ScriptGenerationRequest(videos=sample_videos)
+            response = script_generator.generate_script(request)
+            
+            # Should not be trimmed
+            assert response.word_count == 1000
+            assert response.generation_metadata["length_management"]["trimming_applied"] is False
+            assert response.generation_metadata["length_management"]["words_trimmed"] == 0
+    
+    def test_script_exceeds_limit_trimming_applied(self, script_generator, sample_videos):
+        """Test that scripts exceeding 10-minute limit are automatically trimmed."""
+        # Create a long script that exceeds 10-minute limit (~1600+ words)
+        base_content = """Welcome to today's AI update! We're diving into the latest developments that are reshaping the technology landscape.
+
+According to Tech Channel, AI tools are becoming more accessible and powerful than ever before. This is a very long paragraph with lots of details that could potentially be trimmed during the length management process. It contains many words and sentences that provide supporting information but might not be essential for the core message that we're trying to convey to our listeners.
+
+Meanwhile, ML Insights points out that efficiency is key in modern AI development and deployment strategies. This section also contains extensive details about various aspects of machine learning that, while interesting and informative, might be candidates for trimming if the script runs too long and exceeds our target duration.
+
+Furthermore, these developments connect to broader trends in the technology industry and business landscape. This paragraph explores various connections and implications that add depth to the discussion but could be condensed if necessary to meet our time constraints.
+
+Additionally, there are practical implications for developers and businesses who are looking to implement these technologies. This section provides specific examples and use cases that demonstrate the real-world impact of these AI developments on productivity and innovation.
+
+In summary, these are the key takeaways from our analysis and discussion. The conclusion wraps up the main points and provides actionable insights for listeners who want to stay informed about AI trends."""
+        
+        # Create a much longer script to exceed 10-minute limit (need 1600+ words)
+        # Each base_content is ~236 words, so we need 7+ repetitions
+        long_script = "\n\n".join([base_content] * 8)  # Repeat 8 times to get ~1900 words
+        
+        with patch.object(script_generator, '_generate_with_retry') as mock_generate:
+            mock_generate.return_value = long_script
+            
+            request = ScriptGenerationRequest(videos=sample_videos)
+            
+            with patch('nanook_curator.script_generator.logger') as mock_logger:
+                response = script_generator.generate_script(request)
+                
+                # Should be trimmed
+                original_word_count = len(long_script.split())
+                assert response.word_count < original_word_count
+                assert response.generation_metadata["length_management"]["trimming_applied"] is True
+                assert response.generation_metadata["length_management"]["words_trimmed"] > 0
+                assert response.generation_metadata["length_management"]["initial_word_count"] == original_word_count
+                assert response.generation_metadata["length_management"]["final_word_count"] == response.word_count
+                
+                # Check that trimming was logged
+                info_calls = [call for call in mock_logger.info.call_args_list 
+                             if "Length management completed" in str(call)]
+                assert len(info_calls) >= 1
+    
+    def test_identify_script_sections(self, script_generator):
+        """Test script section identification for importance-based trimming."""
+        script = """Welcome to today's AI update! We're diving into the latest developments.
+
+According to Tech Channel, AI tools are becoming more accessible. This is key insight content.
+
+Meanwhile, ML Insights points out that efficiency matters. This is transition content.
+
+For example, specific implementations show great results. This is supporting detail content.
+
+In summary, these are the key takeaways. This is conclusion content."""
+        
+        sections = script_generator._identify_script_sections(script)
+        
+        assert len(sections) == 5
+        assert sections[0]["type"] == "introduction"
+        assert sections[1]["type"] == "key_insight"  # Contains "According to"
+        assert sections[2]["type"] == "transition"   # Contains "Meanwhile"
+        assert sections[3]["type"] == "supporting_detail"  # Contains "For example"
+        assert sections[4]["type"] == "conclusion"   # Contains "In summary"
+        
+        # Check word counts are calculated
+        for section in sections:
+            assert section["word_count"] > 0
+            assert section["position"] >= 0
+    
+    def test_calculate_section_importance(self, script_generator):
+        """Test importance score calculation for different section types."""
+        sections = [
+            {"content": "Welcome to today's show", "type": "introduction", "word_count": 5},
+            {"content": "According to research, this is important", "type": "key_insight", "word_count": 7},
+            {"content": "Meanwhile, we also see trends", "type": "transition", "word_count": 6},
+            {"content": "For example, specific cases show", "type": "supporting_detail", "word_count": 6},
+            {"content": "In summary, key takeaways are", "type": "conclusion", "word_count": 6}
+        ]
+        
+        importance_scores = script_generator._calculate_section_importance(sections)
+        
+        # Introduction and conclusion should have high importance
+        assert importance_scores[0] >= 0.8  # introduction
+        assert importance_scores[4] >= 0.8  # conclusion
+        
+        # Key insights should have high importance
+        assert importance_scores[1] >= 0.7  # key_insight
+        
+        # Supporting details should have lower importance
+        assert importance_scores[3] <= 0.5  # supporting_detail
+    
+    def test_progressive_trimming_removes_low_importance(self, script_generator):
+        """Test that progressive trimming removes low-importance sections first."""
+        sections = [
+            {"content": "Welcome introduction", "type": "introduction", "word_count": 10},
+            {"content": "Key insight content", "type": "key_insight", "word_count": 20},
+            {"content": "Supporting detail content", "type": "supporting_detail", "word_count": 30},
+            {"content": "Another supporting detail", "type": "supporting_detail", "word_count": 25},
+            {"content": "Conclusion content", "type": "conclusion", "word_count": 15}
+        ]
+        
+        importance_scores = {0: 0.9, 1: 0.8, 2: 0.3, 3: 0.3, 4: 0.9}
+        
+        # Target word count that requires removing some sections
+        target_word_count = 50  # Total is 100, so need to remove ~50 words
+        
+        trimmed_script = script_generator._progressive_trimming(
+            sections, importance_scores, target_word_count, 1500
+        )
+        
+        # Should preserve introduction, key insight, and conclusion
+        assert "Welcome introduction" in trimmed_script
+        assert "Key insight content" in trimmed_script
+        assert "Conclusion content" in trimmed_script
+        
+        # Should remove or trim supporting details
+        final_word_count = len(trimmed_script.split())
+        assert final_word_count <= target_word_count * 1.1  # Allow small margin
+    
+    def test_ensure_script_coherence(self, script_generator):
+        """Test that script coherence is maintained after trimming."""
+        # Script with abrupt transitions after trimming
+        trimmed_script = """Welcome to today's update.
+
+AI tools are becoming powerful.
+
+The conclusion shows great promise."""
+        
+        coherent_script = script_generator._ensure_script_coherence(trimmed_script)
+        
+        # Should add transitions between paragraphs
+        paragraphs = coherent_script.split('\n\n')
+        assert len(paragraphs) == 3
+        
+        # Second paragraph should have a transition added
+        second_para = paragraphs[1].lower()
+        transition_words = ["meanwhile", "furthermore", "additionally", "however"]
+        assert any(word in second_para for word in transition_words)
+    
+    def test_length_management_preserves_structure(self, script_generator, sample_videos):
+        """Test that length management preserves essential script structure."""
+        # Create a structured script with clear intro, body, conclusion that's long enough to trigger trimming
+        base_section = """Welcome to today's comprehensive AI update! This is our detailed introduction that sets the context for everything we'll be discussing in today's episode about artificial intelligence developments.
+
+According to Tech Channel, AI tools are revolutionary and changing how we work with technology every single day. This is key insight number one with important details about the latest developments in artificial intelligence tools and their practical applications for businesses and developers.
+
+Meanwhile, ML Insights shows efficiency trends that are reshaping the machine learning landscape. This is key insight number two with supporting information about how these trends are affecting the industry and what it means for future development.
+
+For example, specific implementations demonstrate remarkable results in various use cases. This is supporting detail that could be trimmed if necessary, but provides valuable context about real-world applications and their impact on productivity.
+
+Additionally, there are various other considerations that developers and businesses need to keep in mind. This is another supporting detail section that explores the broader implications of these technological advances.
+
+Furthermore, the implications are far-reaching and will continue to shape the technology industry. This is more supporting content that might be trimmed during length management while preserving the core message.
+
+In summary, these developments are significant and represent a major shift in how we approach artificial intelligence. This is our conclusion with key takeaways that listeners can apply in their own work and projects."""
+        
+        # Make it long enough to trigger trimming by repeating sections
+        structured_script = "\n\n".join([base_section] * 3)  # Repeat 3 times to trigger trimming
+        
+        with patch.object(script_generator, '_generate_with_retry') as mock_generate:
+            mock_generate.return_value = structured_script
+            
+            request = ScriptGenerationRequest(videos=sample_videos)
+            response = script_generator.generate_script(request)
+            
+            # Should preserve introduction and conclusion
+            assert response.script.startswith("Welcome to today's comprehensive AI update!")
+            assert "In summary" in response.script
+            
+            # Should preserve key insights with source attribution
+            assert "According to Tech Channel" in response.script
+            assert "ML Insights" in response.script
+            
+            # Structure should be maintained
+            paragraphs = response.script.split('\n\n')
+            assert len(paragraphs) >= 3  # At least intro, body, conclusion
+
+
 class TestErrorHandling:
     """Test error handling scenarios."""
     
@@ -527,28 +721,46 @@ class TestErrorHandling:
             with pytest.raises(ValueError, match="Generated script too short"):
                 script_generator.generate_script(request)
     
-    def test_very_long_script_response(self, script_generator, sample_videos):
-        """Test handling of very long script response."""
+    def test_very_long_script_response_with_trimming(self, script_generator, sample_videos):
+        """Test handling of very long script response with automatic trimming."""
         with patch.object(script_generator, '_generate_with_retry') as mock_generate:
-            # Create a very long script (3000 words)
-            long_script = " ".join(["word"] * 3000)
-            mock_generate.return_value = long_script
+            # Create a very long script with proper structure (2000+ words, ~13 minutes)
+            long_script = """Welcome to today's comprehensive AI update! We're diving into the latest developments that are reshaping the technology landscape in ways we've never seen before.
+
+According to Tech Channel, AI tools are becoming more accessible and powerful than ever before. This is a very long paragraph with lots of details that could potentially be trimmed during the length management process. It contains many words and sentences that provide supporting information but might not be essential for the core message that we're trying to convey to our listeners. The developments in artificial intelligence are happening at an unprecedented pace, with new tools and capabilities being released almost daily.
+
+Meanwhile, ML Insights points out that efficiency is key in modern AI development and deployment strategies. This section also contains extensive details about various aspects of machine learning that, while interesting and informative, might be candidates for trimming if the script runs too long and exceeds our target duration. The focus on efficiency isn't just about computational resources, but also about making AI more accessible to developers and businesses of all sizes.
+
+Furthermore, these developments connect to broader trends in the technology industry and business landscape. This paragraph explores various connections and implications that add depth to the discussion but could be condensed if necessary to meet our time constraints. The interconnected nature of these advances means that progress in one area often accelerates development in others.
+
+Additionally, there are practical implications for developers and businesses who are looking to implement these technologies. This section provides specific examples and use cases that demonstrate the real-world impact of these AI developments on productivity and innovation. From small startups to large enterprises, organizations are finding new ways to leverage AI capabilities.
+
+For example, specific implementations demonstrate remarkable results in various use cases and scenarios. This supporting detail section could be trimmed if necessary, but provides valuable context about real-world applications and their impact on productivity and business outcomes.
+
+Moreover, the implications extend beyond just technical capabilities to include economic and social considerations. This additional supporting content explores the broader impact of AI development on society, employment, and economic structures.
+
+In summary, these developments are significant and represent a major shift in how we approach artificial intelligence. This is our conclusion with key takeaways that listeners can apply in their own work and projects, helping them stay ahead of the curve in this rapidly evolving field."""
+            
+            # Repeat sections to make it exceed 1600 words (need ~1600+ for 10+ minutes)
+            repeated_script = "\n\n".join([long_script] * 5)  # ~2000 words, ~13 minutes
+            mock_generate.return_value = repeated_script
             
             request = ScriptGenerationRequest(
                 videos=sample_videos,
                 target_word_count_max=1500
             )
             
-            # Should not raise error but should log warning
             with patch('nanook_curator.script_generator.logger') as mock_logger:
                 response = script_generator.generate_script(request)
                 
-                assert response.word_count == 3000
-                # Check that warning was called (may be called multiple times due to video selection)
-                warning_calls = [call for call in mock_logger.warning.call_args_list 
-                               if "longer than expected" in str(call)]
-                assert len(warning_calls) >= 1
-                assert "longer than expected" in str(warning_calls[0])
+                # Should be automatically trimmed to ~10 minutes (1550 words max, allow small margin)
+                assert response.word_count <= 1600  # Allow small margin for trimming precision
+                assert response.generation_metadata["length_management"]["trimming_applied"] is True
+                
+                # Should log the trimming process
+                info_calls = [call for call in mock_logger.info.call_args_list 
+                             if "Script exceeds 10-minute target" in str(call)]
+                assert len(info_calls) >= 1
 
 
 @pytest.fixture
