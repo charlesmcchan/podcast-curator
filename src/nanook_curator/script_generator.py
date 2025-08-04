@@ -89,18 +89,62 @@ class OpenAIScriptGenerator:
         if not valid_videos:
             raise ValueError("At least one video must have a transcript for script generation")
         
-        logger.info(f"Generating script from {len(valid_videos)} videos")
+        # Select top 3-5 ranked videos as per requirement 4.1
+        top_videos = self._select_top_ranked_videos(valid_videos)
+        
+        logger.info(f"Generating script from {len(top_videos)} top-ranked videos "
+                   f"(selected from {len(valid_videos)} valid videos)")
         
         # Generate the script with retry logic
-        script_content = self._generate_with_retry(request, valid_videos)
+        script_content = self._generate_with_retry(request, top_videos)
         
         # Validate and process the response
-        response = self._process_script_response(script_content, valid_videos, request)
+        response = self._process_script_response(script_content, top_videos, request)
         
         logger.info(f"Generated script: {response.word_count} words, "
-                   f"{response.estimated_duration_minutes:.1f} minutes")
+                   f"{response.estimated_duration_minutes:.1f} minutes, "
+                   f"synthesis score: {response.generation_metadata.get('synthesis_quality', {}).get('structure_score', 0):.2f}")
         
         return response
+    
+    def _select_top_ranked_videos(self, videos: List[VideoData]) -> List[VideoData]:
+        """
+        Select the top 3-5 highest-ranked videos for script generation.
+        
+        Args:
+            videos: List of valid videos with transcripts
+            
+        Returns:
+            List of top 3-5 videos sorted by quality score
+        """
+        # Sort videos by quality score (highest first)
+        sorted_videos = sorted(
+            [v for v in videos if v.quality_score is not None],
+            key=lambda x: x.quality_score,
+            reverse=True
+        )
+        
+        # If no quality scores, use all videos up to 5
+        if not sorted_videos:
+            logger.warning("No videos have quality scores, using first 5 videos")
+            return videos[:5]
+        
+        # Select top 3-5 videos based on quality distribution
+        if len(sorted_videos) >= 5:
+            # Use top 5 if we have enough high-quality videos
+            top_videos = sorted_videos[:5]
+        elif len(sorted_videos) >= 3:
+            # Use top 3-4 if we have at least 3 quality videos
+            top_videos = sorted_videos[:min(4, len(sorted_videos))]
+        else:
+            # Use all available videos if less than 3
+            logger.warning(f"Only {len(sorted_videos)} videos with quality scores available")
+            top_videos = sorted_videos
+        
+        logger.info(f"Selected {len(top_videos)} videos with quality scores: "
+                   f"{[f'{v.quality_score:.1f}' for v in top_videos]}")
+        
+        return top_videos
     
     def _generate_with_retry(self, request: ScriptGenerationRequest, videos: List[VideoData]) -> str:
         """
@@ -178,74 +222,115 @@ class OpenAIScriptGenerator:
             System prompt string
         """
         return f"""You are an expert podcast script writer specializing in AI and technology content. 
-Your task is to create engaging, informative podcast scripts that synthesize information from multiple YouTube videos.
+Your task is to create engaging, informative podcast scripts that synthesize information from multiple YouTube videos into a cohesive narrative.
 
 REQUIREMENTS:
-- Target length: {request.target_word_count_min}-{request.target_word_count_max} words
-- Style: {request.style} and engaging
+- Target length: {request.target_word_count_min}-{request.target_word_count_max} words (5-10 minutes speaking time)
+- Style: {request.style} and engaging for audio consumption
 - Language: {request.language}
 - Audience: Tech-savvy professionals interested in AI developments
 
-STRUCTURE:
-1. Hook/Introduction (10-15% of content)
-2. Main content with smooth transitions between topics (70-80% of content)
-3. Key takeaways and conclusion (10-15% of content)
+SCRIPT STRUCTURE (MANDATORY):
+1. HOOK/INTRODUCTION (10-15% of content):
+   - Start with an engaging hook that captures attention
+   - Briefly preview the main topics to be covered
+   - Set the context for why these developments matter
 
-GUIDELINES:
-- Create a cohesive narrative that flows naturally between video topics
-- Include specific insights and technical details from the source videos
-- Use conversational tone suitable for audio consumption
-- Add smooth transitions between different topics/sources
-- Cite sources naturally within the narrative (e.g., "According to [Channel Name]...")
-- Focus on the most valuable and actionable insights
+2. MAIN CONTENT (70-80% of content):
+   - Synthesize insights from the top 3-5 ranked videos
+   - Create smooth transitions between different video topics
+   - Maintain narrative flow while covering distinct insights
+   - Include specific technical details and practical implications
+   - Cite original video sources naturally in the narrative
+
+3. KEY TAKEAWAYS & CONCLUSION (10-15% of content):
+   - Summarize the most important insights
+   - Connect the dots between different topics
+   - End with actionable takeaways or future implications
+
+NARRATIVE SYNTHESIS GUIDELINES:
+- Create a cohesive story arc that connects insights from multiple sources
+- Use transitional phrases to move smoothly between video topics
+- Avoid simply summarizing each video sequentially
+- Instead, weave insights together thematically
+- Include specific quotes or key points from each source video
+- Maintain conversational tone suitable for podcast listening
+- Cite sources naturally (e.g., "As highlighted by [Channel Name]...", "According to the analysis from [Channel]...")
+
+QUALITY REQUIREMENTS:
+- Focus on the most valuable and actionable insights from each video
 - Avoid repetitive information across sources
 - Make complex topics accessible without oversimplifying
+- Ensure technical accuracy while maintaining engagement
+- Create content that justifies the 5-10 minute listening time
 
 OUTPUT FORMAT:
-Provide only the script content without additional formatting, headers, or metadata."""
+Provide only the script content without additional formatting, headers, or metadata. The script should be ready for immediate podcast recording."""
     
     def _create_script_prompt(self, request: ScriptGenerationRequest, videos: List[VideoData]) -> str:
         """
-        Create the user prompt with video content.
+        Create the user prompt with video content for script synthesis.
         
         Args:
             request: Script generation request
-            videos: Videos to include in the script
+            videos: Videos to include in the script (top 3-5 ranked)
             
         Returns:
             Formatted prompt string
         """
         prompt_parts = [
-            f"Create a {request.target_word_count_min}-{request.target_word_count_max} word podcast script from the following video content:",
+            f"Create a {request.target_word_count_min}-{request.target_word_count_max} word podcast script by synthesizing insights from the following {len(videos)} top-ranked videos:",
             ""
         ]
         
-        # Add video content
+        # Add video content with enhanced metadata for better synthesis
         for i, video in enumerate(videos, 1):
             prompt_parts.extend([
-                f"VIDEO {i}: {video.title}",
+                f"=== SOURCE VIDEO {i} ===",
+                f"Title: {video.title}",
                 f"Channel: {video.channel}",
                 f"Views: {video.view_count:,}",
                 f"Quality Score: {video.quality_score:.1f}/100" if video.quality_score else "Quality Score: N/A",
                 f"Key Topics: {', '.join(video.key_topics)}" if video.key_topics else "Key Topics: N/A",
                 "",
-                "TRANSCRIPT:",
-                self._truncate_transcript(video.transcript, max_words=800),  # Limit transcript length
+                "TRANSCRIPT CONTENT:",
+                self._truncate_transcript(video.transcript, max_words=800),
                 "",
                 "---",
                 ""
             ])
         
         prompt_parts.extend([
-            "INSTRUCTIONS:",
-            "- Synthesize the most valuable insights from these videos into a cohesive narrative",
-            "- Focus on recent developments, practical applications, and key takeaways",
-            "- Maintain a conversational tone suitable for podcast listening",
-            "- Include natural source attribution throughout the script",
-            "- Ensure smooth transitions between topics from different videos",
-            f"- Target exactly {request.target_word_count_min}-{request.target_word_count_max} words",
+            "SYNTHESIS INSTRUCTIONS:",
             "",
-            "Generate the podcast script now:"
+            "1. NARRATIVE STRUCTURE:",
+            "   - Create a compelling introduction that hooks the listener",
+            "   - Develop main content that weaves insights from all videos together",
+            "   - Conclude with key takeaways and actionable insights",
+            "",
+            "2. CONTENT SYNTHESIS:",
+            "   - Don't summarize each video separately",
+            "   - Instead, identify common themes and complementary insights",
+            "   - Create a unified narrative that connects different perspectives",
+            "   - Highlight unique insights from each source",
+            "",
+            "3. SOURCE ATTRIBUTION:",
+            "   - Naturally cite each video source within the narrative flow",
+            "   - Use varied attribution phrases (e.g., 'According to [Channel]...', 'As highlighted in [Title]...', '[Channel] points out that...')",
+            "   - Ensure all source videos are referenced in the final script",
+            "",
+            "4. TRANSITIONS & FLOW:",
+            "   - Use smooth transitions between topics from different videos",
+            "   - Connect ideas logically rather than jumping between sources",
+            "   - Maintain conversational flow suitable for audio consumption",
+            "",
+            "5. TECHNICAL REQUIREMENTS:",
+            f"   - Target exactly {request.target_word_count_min}-{request.target_word_count_max} words",
+            "   - Maintain engaging, conversational tone throughout",
+            "   - Include specific technical details and practical implications",
+            "   - Focus on the most valuable insights that justify the listening time",
+            "",
+            "Generate the cohesive podcast script now, ensuring it meets all synthesis and structuring requirements:"
         ])
         
         return "\n".join(prompt_parts)
@@ -308,6 +393,9 @@ Provide only the script content without additional formatting, headers, or metad
         if word_count > request.target_word_count_max * 1.5:
             logger.warning(f"Generated script longer than expected: {word_count} words")
         
+        # Validate script synthesis quality
+        synthesis_quality = self._validate_script_synthesis(script_content, videos)
+        
         # Create response
         response = ScriptGenerationResponse(
             script=script_content,
@@ -324,11 +412,86 @@ Provide only the script content without additional formatting, headers, or metad
                 "style": request.style,
                 "source_video_count": len(videos),
                 "total_source_views": sum(v.view_count for v in videos),
-                "avg_source_quality": sum(v.quality_score or 0 for v in videos) / len(videos)
+                "avg_source_quality": sum(v.quality_score or 0 for v in videos) / len(videos),
+                "synthesis_quality": synthesis_quality
             }
         )
         
         return response
+    
+    def _validate_script_synthesis(self, script_content: str, videos: List[VideoData]) -> Dict[str, Any]:
+        """
+        Validate that the script meets synthesis and structuring requirements.
+        
+        Args:
+            script_content: Generated script content
+            videos: Source videos used
+            
+        Returns:
+            Dictionary with synthesis quality metrics
+        """
+        synthesis_metrics = {
+            "has_introduction": False,
+            "has_conclusion": False,
+            "source_attribution_count": 0,
+            "sources_referenced": [],
+            "transition_indicators": 0,
+            "structure_score": 0.0
+        }
+        
+        script_lower = script_content.lower()
+        
+        # Check for introduction indicators
+        intro_indicators = [
+            "welcome", "today", "we're", "let's", "first", "starting", 
+            "diving into", "exploring", "looking at"
+        ]
+        if any(indicator in script_lower[:200] for indicator in intro_indicators):
+            synthesis_metrics["has_introduction"] = True
+        
+        # Check for conclusion indicators
+        conclusion_indicators = [
+            "takeaway", "conclusion", "summary", "wrap up", "finally", 
+            "in summary", "to conclude", "key points", "remember"
+        ]
+        if any(indicator in script_lower[-300:] for indicator in conclusion_indicators):
+            synthesis_metrics["has_conclusion"] = True
+        
+        # Count source attributions
+        for video in videos:
+            channel_mentions = script_lower.count(video.channel.lower())
+            if channel_mentions > 0:
+                synthesis_metrics["source_attribution_count"] += channel_mentions
+                synthesis_metrics["sources_referenced"].append(video.channel)
+        
+        # Count transition indicators
+        transition_phrases = [
+            "according to", "as highlighted", "points out", "meanwhile", 
+            "furthermore", "additionally", "on the other hand", "however",
+            "building on", "this connects to", "similarly", "in contrast"
+        ]
+        for phrase in transition_phrases:
+            synthesis_metrics["transition_indicators"] += script_lower.count(phrase)
+        
+        # Calculate overall structure score
+        structure_score = 0.0
+        if synthesis_metrics["has_introduction"]:
+            structure_score += 0.3
+        if synthesis_metrics["has_conclusion"]:
+            structure_score += 0.3
+        if synthesis_metrics["source_attribution_count"] >= len(videos):
+            structure_score += 0.2
+        if synthesis_metrics["transition_indicators"] >= 3:
+            structure_score += 0.2
+        
+        synthesis_metrics["structure_score"] = structure_score
+        
+        # Log synthesis quality
+        logger.info(f"Script synthesis quality - Structure score: {structure_score:.2f}, "
+                   f"Sources referenced: {len(synthesis_metrics['sources_referenced'])}/{len(videos)}, "
+                   f"Transitions: {synthesis_metrics['transition_indicators']}")
+        
+        return synthesis_metrics
     
     def validate_api_connection(self) -> bool:
         """

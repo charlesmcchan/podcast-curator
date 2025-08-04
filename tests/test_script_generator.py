@@ -316,8 +316,9 @@ class TestOpenAIScriptGenerator:
         assert "Machine Learning Trends 2024" in prompt
         assert "Tech Channel" in prompt
         assert "ML Insights" in prompt
-        assert "TRANSCRIPT:" in prompt
+        assert "TRANSCRIPT CONTENT:" in prompt  # Updated to match new format
         assert "750-1500 word" in prompt
+        assert "SYNTHESIS INSTRUCTIONS:" in prompt  # Check for new synthesis instructions
     
     @patch('nanook_curator.script_generator.OpenAI')
     def test_validate_api_connection_success(self, mock_openai_class):
@@ -418,6 +419,91 @@ class TestConvenienceFunctions:
         assert "last_updated" in updated_state.generation_metadata
 
 
+class TestScriptSynthesis:
+    """Test script synthesis and structuring functionality."""
+    
+    def test_select_top_ranked_videos(self, script_generator):
+        """Test selection of top 3-5 ranked videos."""
+        videos = [
+            VideoData(
+                video_id="dQw4w9WgXc1", title="Video 1", channel="Channel 1",
+                view_count=1000, like_count=100, comment_count=10,
+                upload_date="2024-01-15T10:00:00Z", transcript="Test transcript",
+                quality_score=95.0
+            ),
+            VideoData(
+                video_id="dQw4w9WgXc2", title="Video 2", channel="Channel 2",
+                view_count=2000, like_count=200, comment_count=20,
+                upload_date="2024-01-16T10:00:00Z", transcript="Test transcript",
+                quality_score=85.0
+            ),
+            VideoData(
+                video_id="dQw4w9WgXc3", title="Video 3", channel="Channel 3",
+                view_count=3000, like_count=300, comment_count=30,
+                upload_date="2024-01-17T10:00:00Z", transcript="Test transcript",
+                quality_score=75.0
+            ),
+            VideoData(
+                video_id="dQw4w9WgXc4", title="Video 4", channel="Channel 4",
+                view_count=4000, like_count=400, comment_count=40,
+                upload_date="2024-01-18T10:00:00Z", transcript="Test transcript",
+                quality_score=65.0
+            )
+        ]
+        
+        top_videos = script_generator._select_top_ranked_videos(videos)
+        
+        assert len(top_videos) == 4  # Should select top 4 videos
+        assert top_videos[0].quality_score == 95.0  # Highest quality first
+        assert top_videos[1].quality_score == 85.0
+        assert top_videos[2].quality_score == 75.0
+        assert top_videos[3].quality_score == 65.0
+    
+    def test_select_top_ranked_videos_no_quality_scores(self, script_generator):
+        """Test video selection when no quality scores are available."""
+        videos = [
+            VideoData(
+                video_id="dQw4w9WgXc1", title="Video 1", channel="Channel 1",
+                view_count=1000, like_count=100, comment_count=10,
+                upload_date="2024-01-15T10:00:00Z", transcript="Test transcript"
+            ),
+            VideoData(
+                video_id="dQw4w9WgXc2", title="Video 2", channel="Channel 2",
+                view_count=2000, like_count=200, comment_count=20,
+                upload_date="2024-01-16T10:00:00Z", transcript="Test transcript"
+            )
+        ]
+        
+        with patch('nanook_curator.script_generator.logger') as mock_logger:
+            top_videos = script_generator._select_top_ranked_videos(videos)
+            
+            assert len(top_videos) == 2
+            mock_logger.warning.assert_called_once()
+            assert "No videos have quality scores" in mock_logger.warning.call_args[0][0]
+    
+    def test_validate_script_synthesis(self, script_generator, sample_videos):
+        """Test script synthesis validation."""
+        script_with_good_structure = """
+        Welcome to today's AI update! We're diving into the latest developments.
+        
+        According to Tech Channel, AI tools are becoming more accessible. 
+        Meanwhile, ML Insights points out that efficiency is key.
+        Furthermore, these developments connect to broader trends.
+        
+        In summary, these are the key takeaways from our analysis.
+        """
+        
+        synthesis_quality = script_generator._validate_script_synthesis(
+            script_with_good_structure, sample_videos
+        )
+        
+        assert synthesis_quality["has_introduction"] is True
+        assert synthesis_quality["has_conclusion"] is True
+        assert synthesis_quality["source_attribution_count"] >= 2
+        assert synthesis_quality["transition_indicators"] >= 3
+        assert synthesis_quality["structure_score"] > 0.8
+
+
 class TestErrorHandling:
     """Test error handling scenarios."""
     
@@ -458,8 +544,11 @@ class TestErrorHandling:
                 response = script_generator.generate_script(request)
                 
                 assert response.word_count == 3000
-                mock_logger.warning.assert_called_once()
-                assert "longer than expected" in mock_logger.warning.call_args[0][0]
+                # Check that warning was called (may be called multiple times due to video selection)
+                warning_calls = [call for call in mock_logger.warning.call_args_list 
+                               if "longer than expected" in str(call)]
+                assert len(warning_calls) >= 1
+                assert "longer than expected" in str(warning_calls[0])
 
 
 @pytest.fixture
