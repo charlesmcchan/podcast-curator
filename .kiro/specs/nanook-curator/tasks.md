@@ -99,7 +99,7 @@
   - _Requirements: 3.5, 1.3_
 
 - [ ] 7. Implement podcast script generation
-- [ ] 7.1 Create OpenAI integration for script generation
+- [x] 7.1 Create OpenAI integration for script generation
   - Implement OpenAI API client with authentication
   - Create prompt templates for podcast script generation
   - Add error handling and retry logic for API failures
