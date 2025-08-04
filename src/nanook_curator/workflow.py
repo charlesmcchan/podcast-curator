@@ -22,39 +22,23 @@ from .content_quality_scorer import ContentQualityScorer
 from .video_ranking_system import VideoRankingSystem, RankingStrategy
 from .script_generator import OpenAIScriptGenerator, ScriptGenerationRequest
 from .search_refinement import SearchRefinementEngine
+from .error_handling import (
+    handle_node_error_with_recovery,
+    handle_api_errors,
+    handle_transcript_errors,
+    validate_processing_state,
+    log_processing_metrics,
+    RetryConfig
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
-def handle_node_error(node_name: str):
-    """
-    Decorator for graceful error handling in LangGraph nodes.
-    
-    Args:
-        node_name: Name of the node for error context
-        
-    Returns:
-        Decorator function
-    """
-    def decorator(func):
-        @wraps(func)
-        def wrapper(state: CuratorState) -> CuratorState:
-            try:
-                logger.info(f"Starting {node_name} node")
-                result = func(state)
-                logger.info(f"Completed {node_name} node successfully")
-                return result
-            except Exception as e:
-                error_msg = f"{node_name} node failed: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                state.add_error(error_msg, node_name)
-                return state
-        return wrapper
-    return decorator
+# Error handling is now imported from error_handling module
 
 
-@handle_node_error("discover_videos")
+@handle_node_error_with_recovery("discover_videos", allow_partial_failure=True)
 def discover_videos_node(state: CuratorState) -> CuratorState:
     """
     Discovers trending YouTube videos based on search keywords.
@@ -68,6 +52,13 @@ def discover_videos_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with discovered videos
     """
+    # Validate state before processing
+    if not validate_processing_state(state, "discover_videos"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "discover_videos")
+    
     config = get_config()
     youtube_client = YouTubeClient(config)
     
@@ -77,12 +68,18 @@ def discover_videos_node(state: CuratorState) -> CuratorState:
     logger.info(f"Discovering videos with keywords: {search_keywords}")
     logger.info(f"Search parameters: max_videos={state.max_videos}, days_back={state.days_back}")
     
-    # Perform video discovery
-    discovered_videos = youtube_client.discover_videos(
-        keywords=search_keywords,
-        max_videos=state.max_videos,
-        days_back=state.days_back
-    )
+    # Perform video discovery with API error handling
+    @handle_api_errors("video_discovery", retry_config=RetryConfig(max_attempts=3, base_delay=2.0))
+    def discover_videos_with_retry():
+        return youtube_client.discover_videos(
+            keywords=search_keywords,
+            max_videos=state.max_videos,
+            days_back=state.days_back
+        )
+    
+    discovered_videos = discover_videos_with_retry()
+    if discovered_videos is None:
+        discovered_videos = []
     
     # Update state with discovered videos
     state.discovered_videos = discovered_videos
@@ -103,7 +100,7 @@ def discover_videos_node(state: CuratorState) -> CuratorState:
     return state
 
 
-@handle_node_error("fetch_video_details")
+@handle_node_error_with_recovery("fetch_video_details", allow_partial_failure=True)
 def fetch_video_details_node(state: CuratorState) -> CuratorState:
     """
     Fetches detailed metadata for discovered videos.
@@ -117,6 +114,13 @@ def fetch_video_details_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with detailed video metadata
     """
+    # Validate state before processing
+    if not validate_processing_state(state, "fetch_video_details"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "fetch_video_details")
+    
     if not state.discovered_videos:
         logger.warning("No videos available for details fetching")
         return state
@@ -129,36 +133,54 @@ def fetch_video_details_node(state: CuratorState) -> CuratorState:
     
     logger.info(f"Fetching detailed metadata for {len(video_ids)} videos")
     
-    # Get detailed video information
-    detailed_videos = youtube_client.get_video_details(video_ids)
+    # Get detailed video information with retry mechanism
+    @handle_api_errors("video_details_batch", retry_config=RetryConfig(max_attempts=3, base_delay=1.5))
+    def fetch_details_with_retry():
+        return youtube_client.get_video_details(video_ids)
+    
+    detailed_videos = fetch_details_with_retry()
+    if detailed_videos is None:
+        detailed_videos = []
     
     # Create mapping of video ID to detailed info
     details_map = {video['id']: video for video in detailed_videos}
     
-    # Update discovered videos with detailed information
+    # Update discovered videos with detailed information (graceful degradation)
     updated_videos = []
+    successful_updates = 0
+    
     for video in state.discovered_videos:
-        if video.video_id in details_map:
-            detailed_info = details_map[video.video_id]
-            
-            # Update video with enhanced metadata
-            video.view_count = detailed_info['statistics']['viewCount']
-            video.like_count = detailed_info['statistics']['likeCount']
-            video.comment_count = detailed_info['statistics']['commentCount']
-            
-            # Add enhanced engagement metrics
-            video.engagement_metrics = detailed_info.get('engagementMetrics', {})
-            
-            # Add video status and availability info
-            video.video_status = detailed_info.get('status', {})
-            
-            # Add content details
-            video.content_details = detailed_info.get('contentDetails', {})
-            
-            updated_videos.append(video)
-        else:
-            logger.warning(f"No detailed info found for video {video.video_id}")
-            # Keep original video even if details fetch failed
+        try:
+            if video.video_id in details_map:
+                detailed_info = details_map[video.video_id]
+                
+                # Safely update video with enhanced metadata
+                try:
+                    video.view_count = int(detailed_info.get('statistics', {}).get('viewCount', video.view_count))
+                    video.like_count = int(detailed_info.get('statistics', {}).get('likeCount', video.like_count))
+                    video.comment_count = int(detailed_info.get('statistics', {}).get('commentCount', video.comment_count))
+                    successful_updates += 1
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Failed to parse statistics for video {video.video_id}: {e}")
+                
+                # Add enhanced engagement metrics (optional)
+                video.engagement_metrics = detailed_info.get('engagementMetrics', {})
+                
+                # Add video status and availability info (optional)
+                video.video_status = detailed_info.get('status', {})
+                
+                # Add content details (optional)
+                video.content_details = detailed_info.get('contentDetails', {})
+                
+                updated_videos.append(video)
+            else:
+                logger.debug(f"No detailed info found for video {video.video_id}, keeping original data")
+                # Keep original video even if details fetch failed
+                updated_videos.append(video)
+                
+        except Exception as e:
+            logger.warning(f"Error processing details for video {video.video_id}: {e}")
+            # Keep original video data
             updated_videos.append(video)
     
     state.discovered_videos = updated_videos
@@ -175,7 +197,7 @@ def fetch_video_details_node(state: CuratorState) -> CuratorState:
     return state
 
 
-@handle_node_error("fetch_transcripts")
+@handle_node_error_with_recovery("fetch_transcripts", allow_partial_failure=True)
 def fetch_transcripts_node(state: CuratorState) -> CuratorState:
     """
     Retrieves video transcripts for all discovered videos.
@@ -189,8 +211,16 @@ def fetch_transcripts_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with transcript data
     """
+    # Validate state before processing
+    if not validate_processing_state(state, "fetch_transcripts"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "fetch_transcripts")
+    
     if not state.discovered_videos:
         logger.warning("No videos available for transcript fetching")
+        state.add_error("No videos available for transcript fetching", "fetch_transcripts")
         return state
     
     config = get_config()
@@ -198,33 +228,64 @@ def fetch_transcripts_node(state: CuratorState) -> CuratorState:
     
     logger.info(f"Fetching transcripts for {len(state.discovered_videos)} videos")
     
-    # Fetch transcripts for all videos
+    # Fetch transcripts for all videos with individual error handling
     videos_with_transcripts = 0
-    for video in state.discovered_videos:
-        transcript = transcript_processor.fetch_transcript(video.video_id)
-        if transcript:
-            video.transcript = transcript
-            videos_with_transcripts += 1
-            logger.debug(f"Transcript fetched for {video.video_id}: {len(transcript)} characters")
-        else:
-            logger.debug(f"No transcript available for {video.video_id}")
+    transcript_errors = []
     
-    # Update metadata
+    for video in state.discovered_videos:
+        try:
+            # Apply transcript-specific error handling with retry
+            @handle_transcript_errors
+            @handle_api_errors("transcript_fetch", video_id=video.video_id, retry_config=RetryConfig(max_attempts=2, base_delay=0.5))
+            def fetch_with_retry():
+                return transcript_processor.fetch_transcript(video.video_id)
+            
+            transcript = fetch_with_retry()
+            
+            if transcript and transcript.strip():
+                video.transcript = transcript
+                videos_with_transcripts += 1
+                logger.debug(f"Transcript fetched for {video.video_id}: {len(transcript)} characters")
+            else:
+                logger.debug(f"Empty transcript for {video.video_id}")
+                transcript_errors.append(f"Empty transcript for video {video.video_id}")
+                
+        except Exception as e:
+            error_msg = f"Failed to fetch transcript for {video.video_id}: {str(e)}"
+            logger.warning(error_msg)
+            transcript_errors.append(error_msg)
+            # Continue processing other videos - non-blocking error
+    
+    # Log transcript errors for debugging
+    if transcript_errors:
+        for error in transcript_errors[:5]:  # Log first 5 errors to avoid spam
+            state.add_error(error, "fetch_transcripts")
+        
+        if len(transcript_errors) > 5:
+            state.add_error(f"... and {len(transcript_errors) - 5} more transcript errors", "fetch_transcripts")
+    
+    # Update metadata with comprehensive transcript information
     state.update_generation_metadata(
         transcript_fetch_timestamp=datetime.now().isoformat(),
         videos_with_transcripts=videos_with_transcripts,
-        transcript_availability_rate=videos_with_transcripts / len(state.discovered_videos) if state.discovered_videos else 0
+        transcript_availability_rate=videos_with_transcripts / len(state.discovered_videos) if state.discovered_videos else 0,
+        transcript_errors_count=len(transcript_errors),
+        videos_processed_for_transcripts=len(state.discovered_videos)
     )
     
     logger.info(f"Transcript fetching complete: {videos_with_transcripts}/{len(state.discovered_videos)} videos have transcripts")
     
     if videos_with_transcripts == 0:
         state.add_error("No transcripts available for any discovered videos", "fetch_transcripts")
+        logger.error("Critical: No transcripts available for script generation")
+    elif videos_with_transcripts < len(state.discovered_videos) * 0.5:
+        state.add_error(f"Low transcript availability: only {videos_with_transcripts}/{len(state.discovered_videos)} videos have transcripts", "fetch_transcripts")
+        logger.warning(f"Low transcript availability rate: {videos_with_transcripts/len(state.discovered_videos)*100:.1f}%")
     
     return state
 
 
-@handle_node_error("evaluate_quality")
+@handle_node_error_with_recovery("evaluate_quality", allow_partial_failure=True)
 def evaluate_quality_node(state: CuratorState) -> CuratorState:
     """
     Evaluates video quality using engagement metrics and content analysis.
@@ -238,8 +299,16 @@ def evaluate_quality_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with quality-evaluated videos
     """
+    # Validate state before processing
+    if not validate_processing_state(state, "evaluate_quality"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "evaluate_quality")
+    
     if not state.discovered_videos:
         logger.warning("No videos available for quality evaluation")
+        state.add_error("No videos available for quality evaluation", "evaluate_quality")
         return state
     
     config = get_config()
@@ -251,22 +320,39 @@ def evaluate_quality_node(state: CuratorState) -> CuratorState:
     
     processed_videos = []
     quality_scores = []
+    evaluation_errors = []
     
     for video in state.discovered_videos:
         try:
-            # Analyze engagement metrics
-            engagement_metrics = engagement_analyzer.analyze_video_engagement(video)
+            # Analyze engagement metrics with error handling
+            try:
+                engagement_metrics = engagement_analyzer.analyze_video_engagement(video)
+            except Exception as e:
+                logger.warning(f"Engagement analysis failed for {video.video_id}: {e}")
+                # Create fallback engagement metrics
+                engagement_metrics = type('EngagementMetrics', (), {
+                    'overall_engagement_score': min(50.0, video.view_count / 1000),
+                    'like_ratio': video.get_like_ratio(),
+                    'engagement_rate': video.get_engagement_rate()
+                })()
+                evaluation_errors.append(f"Engagement analysis failed for {video.video_id}")
             
             # Analyze transcript content if available
-            if video.transcript:
-                # Perform transcript analysis
-                video = transcript_processor.analyze_transcript(video)
-                
-                # Calculate content quality metrics
-                content_metrics = content_scorer.calculate_combined_quality_score(video)
-                
-                # Store content analysis results
-                video.content_quality_analysis = content_metrics
+            if video.transcript and video.transcript.strip():
+                try:
+                    # Perform transcript analysis with error handling
+                    video = transcript_processor.analyze_transcript(video)
+                    
+                    # Calculate content quality metrics
+                    content_metrics = content_scorer.calculate_combined_quality_score(video)
+                    
+                    # Store content analysis results
+                    video.content_quality_analysis = content_metrics
+                except Exception as e:
+                    logger.warning(f"Content analysis failed for {video.video_id}: {e}")
+                    # Fallback content score
+                    video.content_analysis_score = 30.0  # Minimal score for having transcript
+                    evaluation_errors.append(f"Content analysis failed for {video.video_id}")
             else:
                 logger.debug(f"No transcript for quality analysis: {video.video_id}")
                 # Create minimal content metrics for videos without transcripts
@@ -275,53 +361,94 @@ def evaluate_quality_node(state: CuratorState) -> CuratorState:
             # Store engagement analysis results
             video.engagement_analysis = engagement_metrics
             
-            # Calculate combined quality score
-            engagement_score = engagement_metrics.overall_engagement_score
-            content_score = getattr(video, 'content_analysis_score', 0.0)
+            # Calculate combined quality score with error handling
+            try:
+                engagement_score = getattr(engagement_metrics, 'overall_engagement_score', 0.0)
+                content_score = getattr(video, 'content_analysis_score', 0.0)
+                
+                # Weight: 60% engagement, 40% content (since not all videos have transcripts)
+                if video.transcript and video.transcript.strip():
+                    combined_score = (engagement_score * 0.6) + (content_score * 0.4)
+                else:
+                    # For videos without transcripts, use engagement score with penalty
+                    combined_score = engagement_score * 0.8  # 20% penalty for missing transcript
+                
+                video.quality_score = max(0.0, min(100.0, combined_score))  # Clamp to 0-100 range
+            except Exception as e:
+                logger.warning(f"Quality score calculation failed for {video.video_id}: {e}")
+                video.quality_score = 25.0  # Minimal fallback score
+                evaluation_errors.append(f"Quality score calculation failed for {video.video_id}")
             
-            # Weight: 60% engagement, 40% content (since not all videos have transcripts)
-            if video.transcript:
-                combined_score = (engagement_score * 0.6) + (content_score * 0.4)
-            else:
-                # For videos without transcripts, use engagement score with penalty
-                combined_score = engagement_score * 0.8  # 20% penalty for missing transcript
-            
-            video.quality_score = combined_score
-            quality_scores.append(combined_score)
+            quality_scores.append(video.quality_score)
             processed_videos.append(video)
             
             logger.debug(f"Quality evaluation for {video.video_id}: "
-                        f"engagement={engagement_score:.1f}, content={content_score:.1f}, "
-                        f"combined={combined_score:.1f}")
+                        f"engagement={getattr(engagement_metrics, 'overall_engagement_score', 0.0):.1f}, "
+                        f"content={getattr(video, 'content_analysis_score', 0.0):.1f}, "
+                        f"combined={video.quality_score:.1f}")
             
         except Exception as e:
-            logger.warning(f"Quality evaluation failed for video {video.video_id}: {e}")
-            # Keep video with minimal quality score
+            logger.error(f"Critical quality evaluation failure for video {video.video_id}: {e}")
+            # Keep video with minimal quality score for graceful degradation
             video.quality_score = 0.0
+            quality_scores.append(0.0)
             processed_videos.append(video)
+            evaluation_errors.append(f"Critical evaluation failure for {video.video_id}: {str(e)}")
+    
+    # Log evaluation errors for debugging
+    if evaluation_errors:
+        for error in evaluation_errors[:5]:  # Log first 5 errors to avoid spam
+            state.add_error(error, "evaluate_quality")
+        
+        if len(evaluation_errors) > 5:
+            state.add_error(f"... and {len(evaluation_errors) - 5} more evaluation errors", "evaluate_quality")
     
     state.processed_videos = processed_videos
     
-    # Calculate quality statistics
-    avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
-    videos_above_threshold = len([score for score in quality_scores if score >= state.quality_threshold])
+    # Calculate quality statistics with error handling
+    try:
+        avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+        videos_above_threshold = len([score for score in quality_scores if score >= state.quality_threshold])
+        videos_with_transcripts = len([v for v in processed_videos if v.transcript and v.transcript.strip()])
+    except Exception as e:
+        logger.error(f"Error calculating quality statistics: {e}")
+        avg_quality = 0.0
+        videos_above_threshold = 0
+        videos_with_transcripts = 0
+        state.add_error(f"Quality statistics calculation failed: {str(e)}", "evaluate_quality")
     
-    # Update metadata
+    # Update metadata with comprehensive quality information
     state.update_generation_metadata(
         quality_evaluation_timestamp=datetime.now().isoformat(),
         videos_processed=len(processed_videos),
         average_quality_score=avg_quality,
         videos_above_threshold=videos_above_threshold,
-        quality_threshold_used=state.quality_threshold
+        videos_with_transcripts=videos_with_transcripts,
+        quality_threshold_used=state.quality_threshold,
+        evaluation_errors_count=len(evaluation_errors),
+        quality_evaluation_success_rate=(len(processed_videos) - len(evaluation_errors)) / len(processed_videos) if processed_videos else 0
     )
     
     logger.info(f"Quality evaluation complete: avg_score={avg_quality:.1f}, "
                f"{videos_above_threshold}/{len(processed_videos)} above threshold ({state.quality_threshold}%)")
     
+    # Add warnings for quality issues
+    if avg_quality < state.quality_threshold:
+        state.add_error(f"Average quality score ({avg_quality:.1f}) below threshold ({state.quality_threshold})", "evaluate_quality")
+        logger.warning(f"Average quality score below threshold: {avg_quality:.1f} < {state.quality_threshold}")
+    
+    if videos_above_threshold < state.min_quality_videos:
+        state.add_error(f"Insufficient quality videos: {videos_above_threshold}/{state.min_quality_videos} required", "evaluate_quality")
+        logger.warning(f"Insufficient quality videos for script generation: {videos_above_threshold}/{state.min_quality_videos}")
+    
+    if len(evaluation_errors) > len(processed_videos) * 0.5:
+        state.add_error(f"High evaluation error rate: {len(evaluation_errors)}/{len(processed_videos)} videos had errors", "evaluate_quality")
+        logger.error(f"High evaluation error rate: {len(evaluation_errors)}/{len(processed_videos)} videos failed evaluation")
+    
     return state
 
 
-@handle_node_error("rank_videos")
+@handle_node_error_with_recovery("rank_videos", allow_partial_failure=True)
 def rank_videos_node(state: CuratorState) -> CuratorState:
     """
     Ranks videos by quality score and evaluates if results meet threshold.
@@ -380,7 +507,7 @@ def rank_videos_node(state: CuratorState) -> CuratorState:
     return state
 
 
-@handle_node_error("generate_script")
+@handle_node_error_with_recovery("generate_script", allow_partial_failure=True)
 def generate_script_node(state: CuratorState) -> CuratorState:
     """
     Generates podcast script from top-ranked videos.
@@ -394,6 +521,13 @@ def generate_script_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with generated podcast script
     """
+    # Validate state before processing
+    if not validate_processing_state(state, "generate_script"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "generate_script")
+    
     if not state.ranked_videos:
         logger.warning("No ranked videos available for script generation")
         state.add_error("No videos available for script generation", "generate_script")
@@ -408,47 +542,125 @@ def generate_script_node(state: CuratorState) -> CuratorState:
         return state
     
     config = get_config()
-    script_generator = OpenAIScriptGenerator(config.openai_api_key)
     
     logger.info(f"Generating script from {len(videos_with_transcripts)} videos with transcripts")
     
-    # Create script generation request
-    request = ScriptGenerationRequest(
-        videos=videos_with_transcripts,
-        target_word_count_min=750,  # 5 minutes minimum
-        target_word_count_max=1500,  # 10 minutes maximum
-        language="en",
-        style="conversational"
-    )
+    # Attempt script generation with retry mechanism and fallback
+    script_generated = False
+    generation_errors = []
     
-    # Generate the script
-    response = script_generator.generate_script(request)
+    try:
+        script_generator = OpenAIScriptGenerator(config.openai_api_key)
+        
+        # Create script generation request with error handling
+        try:
+            request = ScriptGenerationRequest(
+                videos=videos_with_transcripts,
+                target_word_count_min=750,  # 5 minutes minimum
+                target_word_count_max=1500,  # 10 minutes maximum
+                language="en",
+                style="conversational"
+            )
+        except Exception as e:
+            logger.error(f"Failed to create script generation request: {e}")
+            generation_errors.append(f"Request creation failed: {str(e)}")
+            raise
+        
+        # Generate the script with API error handling and retry
+        @handle_api_errors("script_generation", retry_config=RetryConfig(max_attempts=3, base_delay=2.0, max_delay=30.0))
+        def generate_with_retry():
+            return script_generator.generate_script(request)
+        
+        response = generate_with_retry()
+        
+        if response and response.script and response.script.strip():
+            # Update state with generated script
+            state.podcast_script = response.script
+            script_generated = True
+            
+            # Validate script quality
+            if response.word_count < 500:
+                state.add_error(f"Generated script is too short: {response.word_count} words", "generate_script")
+                logger.warning(f"Generated script is shorter than expected: {response.word_count} words")
+            elif response.word_count > 2000:
+                state.add_error(f"Generated script is too long: {response.word_count} words", "generate_script")
+                logger.warning(f"Generated script is longer than expected: {response.word_count} words")
+            
+        else:
+            raise ValueError("Empty or invalid script response from generator")
+            
+    except Exception as e:
+        logger.error(f"Script generation failed: {e}")
+        generation_errors.append(f"Script generation failed: {str(e)}")
+        
+        # Attempt fallback script generation using error handling recovery
+        logger.info("Attempting fallback script generation")
+        try:
+            from .error_handling import _create_fallback_script
+            fallback_script = _create_fallback_script(videos_with_transcripts)
+            state.podcast_script = fallback_script
+            script_generated = True
+            
+            # Create minimal response object for metadata
+            response = type('FallbackResponse', (), {
+                'script': fallback_script,
+                'word_count': len(fallback_script.split()),
+                'estimated_duration_minutes': len(fallback_script.split()) / 155.0,
+                'source_videos': [v.video_id for v in videos_with_transcripts],
+                'generation_metadata': {'fallback_used': True, 'original_error': str(e)}
+            })()
+            
+            state.add_error(f"Used fallback script generation due to: {str(e)}", "generate_script")
+            logger.warning("Fallback script generation successful")
+            
+        except Exception as fallback_error:
+            logger.error(f"Fallback script generation also failed: {fallback_error}")
+            generation_errors.append(f"Fallback generation failed: {str(fallback_error)}")
+            state.add_error(f"Both primary and fallback script generation failed", "generate_script")
+            return state
     
-    # Update state with generated script
-    state.podcast_script = response.script
+    # Log generation errors
+    if generation_errors:
+        for error in generation_errors:
+            state.add_error(error, "generate_script")
     
-    # Update metadata with script generation information
-    state.update_generation_metadata(
-        script_generation_timestamp=datetime.now().isoformat(),
-        script_word_count=response.word_count,
-        script_estimated_duration=response.estimated_duration_minutes,
-        source_videos_used=response.source_videos,
-        script_generation_metadata=response.generation_metadata
-    )
+    # Update state with script if generated
+    if script_generated and hasattr(response, 'script'):
     
-    logger.info(f"Script generation complete: {response.word_count} words, "
-               f"{response.estimated_duration_minutes:.1f} minutes estimated duration")
+        # Update metadata with script generation information
+        state.update_generation_metadata(
+            script_generation_timestamp=datetime.now().isoformat(),
+            script_word_count=getattr(response, 'word_count', len(state.podcast_script.split()) if state.podcast_script else 0),
+            script_estimated_duration=getattr(response, 'estimated_duration_minutes', 0.0),
+            source_videos_used=getattr(response, 'source_videos', [v.video_id for v in videos_with_transcripts]),
+            script_generation_metadata=getattr(response, 'generation_metadata', {}),
+            script_generation_errors_count=len(generation_errors),
+            script_generation_success=script_generated,
+            videos_used_for_generation=len(videos_with_transcripts)
+        )
+        
+        logger.info(f"Script generation complete: {getattr(response, 'word_count', 0)} words, "
+                   f"{getattr(response, 'estimated_duration_minutes', 0.0):.1f} minutes estimated duration")
+        
+        # Log synthesis quality if available
+        generation_metadata = getattr(response, 'generation_metadata', {})
+        synthesis_quality = generation_metadata.get('synthesis_quality', {})
+        if synthesis_quality:
+            logger.info(f"Script synthesis quality: structure_score={synthesis_quality.get('structure_score', 0):.2f}, "
+                       f"sources_referenced={len(synthesis_quality.get('sources_referenced', []))}")
+        
+        # Log fallback usage if applicable
+        if generation_metadata.get('fallback_used'):
+            logger.info("Fallback script generation was used due to primary generation failure")
     
-    # Log synthesis quality if available
-    synthesis_quality = response.generation_metadata.get('synthesis_quality', {})
-    if synthesis_quality:
-        logger.info(f"Script synthesis quality: structure_score={synthesis_quality.get('structure_score', 0):.2f}, "
-                   f"sources_referenced={len(synthesis_quality.get('sources_referenced', []))}")
+    else:
+        logger.error("Script generation completely failed - no script available")
+        state.add_error("Complete script generation failure", "generate_script")
     
     return state
 
 
-@handle_node_error("store_results")
+@handle_node_error_with_recovery("store_results", allow_partial_failure=False)
 def store_results_node(state: CuratorState) -> CuratorState:
     """
     Stores generated script and metadata including search refinement history.
@@ -461,60 +673,98 @@ def store_results_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with storage confirmation
     """
-    if not state.podcast_script:
+    # Validate state before processing
+    if not validate_processing_state(state, "store_results"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "store_results")
+    
+    if not state.podcast_script or not state.podcast_script.strip():
         logger.warning("No podcast script available for storage")
+        state.add_error("No podcast script available for storage", "store_results")
         return state
     
     logger.info("Storing results and metadata")
     
-    # Create comprehensive storage metadata
-    storage_metadata = {
-        'storage_timestamp': datetime.now().isoformat(),
-        'workflow_completion_time': datetime.now().isoformat(),
-        'total_processing_time': 'calculated_by_external_system',  # Will be calculated by caller
-        'final_state_summary': state.get_processing_summary(),
-        'script_metadata': {
-            'word_count': len(state.podcast_script.split()),
-            'estimated_duration': len(state.podcast_script.split()) / 155.0,  # 155 WPM average
-            'source_video_count': len(state.ranked_videos),
-            'quality_videos_used': len([v for v in state.ranked_videos if v.quality_score and v.quality_score >= state.quality_threshold])
-        },
-        'search_refinement_summary': {
-            'total_attempts': state.search_attempt,
-            'final_search_terms': state.current_search_terms,
-            'original_search_terms': state.search_keywords,
-            'videos_discovered': len(state.discovered_videos),
-            'videos_processed': len(state.processed_videos),
-            'videos_ranked': len(state.ranked_videos)
-        },
-        'quality_analysis': {
-            'threshold_used': state.quality_threshold,
-            'minimum_required': state.min_quality_videos,
-            'threshold_met': state.has_sufficient_quality_videos(),
-            'average_quality': sum(v.quality_score for v in state.ranked_videos if v.quality_score) / len(state.ranked_videos) if state.ranked_videos else 0
-        },
-        'error_summary': {
-            'total_errors': len(state.errors),
-            'errors': state.errors[-5:] if state.errors else []  # Last 5 errors
+    # Create comprehensive storage metadata with error handling
+    try:
+        storage_metadata = {
+            'storage_timestamp': datetime.now().isoformat(),
+            'workflow_completion_time': datetime.now().isoformat(),
+            'total_processing_time': 'calculated_by_external_system',  # Will be calculated by caller
+            'final_state_summary': state.get_processing_summary(),
+            'script_metadata': {
+                'word_count': len(state.podcast_script.split()) if state.podcast_script else 0,
+                'estimated_duration': len(state.podcast_script.split()) / 155.0 if state.podcast_script else 0.0,  # 155 WPM average
+                'source_video_count': len(state.ranked_videos),
+                'quality_videos_used': len([v for v in state.ranked_videos if v.quality_score and v.quality_score >= state.quality_threshold])
+            },
+            'search_refinement_summary': {
+                'total_attempts': state.search_attempt,
+                'final_search_terms': state.current_search_terms,
+                'original_search_terms': state.search_keywords,
+                'videos_discovered': len(state.discovered_videos),
+                'videos_processed': len(state.processed_videos),
+                'videos_ranked': len(state.ranked_videos)
+            },
+            'quality_analysis': {
+                'threshold_used': state.quality_threshold,
+                'minimum_required': state.min_quality_videos,
+                'threshold_met': state.has_sufficient_quality_videos(),
+                'average_quality': sum(v.quality_score for v in state.ranked_videos if v.quality_score) / len(state.ranked_videos) if state.ranked_videos else 0
+            },
+            'error_summary': {
+                'total_errors': len(state.errors),
+                'errors': state.errors[-5:] if state.errors else []  # Last 5 errors
+            }
         }
-    }
+        
+    except Exception as e:
+        logger.error(f"Error creating storage metadata: {e}")
+        state.add_error(f"Storage metadata creation failed: {str(e)}", "store_results")
+        # Create minimal metadata as fallback
+        storage_metadata = {
+            'storage_timestamp': datetime.now().isoformat(),
+            'error': f"Metadata creation failed: {str(e)}",
+            'script_available': bool(state.podcast_script),
+            'total_errors': len(state.errors)
+        }
     
     # Update state metadata with storage information
-    state.update_generation_metadata(**storage_metadata)
+    try:
+        state.update_generation_metadata(**storage_metadata)
+    except Exception as e:
+        logger.error(f"Error updating generation metadata: {e}")
+        state.add_error(f"Metadata update failed: {str(e)}", "store_results")
     
     # In a real implementation, this would save to a database or file system
     # For now, we just log the successful storage
-    logger.info(f"Results stored successfully: script with {storage_metadata['script_metadata']['word_count']} words, "
-               f"{storage_metadata['script_metadata']['source_video_count']} source videos")
-    
-    # Log final processing summary
-    summary = state.get_processing_summary()
-    logger.info(f"Workflow complete - Final summary: {summary}")
+    try:
+        script_word_count = storage_metadata.get('script_metadata', {}).get('word_count', 0)
+        source_video_count = storage_metadata.get('script_metadata', {}).get('source_video_count', 0)
+        
+        logger.info(f"Results stored successfully: script with {script_word_count} words, "
+                   f"{source_video_count} source videos")
+        
+        # Log final processing summary
+        summary = state.get_processing_summary()
+        logger.info(f"Workflow complete - Final summary: {summary}")
+        
+        # Log error summary if there were issues
+        if state.errors:
+            logger.warning(f"Workflow completed with {len(state.errors)} errors. Recent errors:")
+            for error in state.errors[-3:]:  # Show last 3 errors
+                logger.warning(f"  - {error}")
+                
+    except Exception as e:
+        logger.error(f"Error logging storage results: {e}")
+        state.add_error(f"Storage logging failed: {str(e)}", "store_results")
     
     return state
 
 
-@handle_node_error("refine_search")
+@handle_node_error_with_recovery("refine_search", allow_partial_failure=True)
 def refine_search_node(state: CuratorState) -> CuratorState:
     """
     Refines search parameters based on previous attempt results.
@@ -528,25 +778,123 @@ def refine_search_node(state: CuratorState) -> CuratorState:
     Returns:
         Updated state with refined search parameters
     """
+    # Validate state before processing
+    if not validate_processing_state(state, "refine_search"):
+        return state
+    
+    # Log processing metrics
+    log_processing_metrics(state, "refine_search")
+    
     logger.info(f"Refining search parameters - attempt {state.search_attempt + 1}/{state.max_search_attempts}")
     
+    # Check if we can still refine
+    if not state.can_refine_search():
+        logger.warning("Maximum search refinement attempts reached")
+        state.add_error("Maximum search refinement attempts reached", "refine_search")
+        return state
+    
     config = get_config()
-    refinement_engine = SearchRefinementEngine(config)
     
-    # Perform iterative search refinement
-    updated_state = refinement_engine.refine_search_iteratively(state)
+    try:
+        refinement_engine = SearchRefinementEngine(config)
+        
+        # Perform iterative search refinement with error handling
+        try:
+            updated_state = refinement_engine.refine_search_iteratively(state)
+        except Exception as e:
+            logger.error(f"Search refinement engine failed: {e}")
+            state.add_error(f"Search refinement failed: {str(e)}", "refine_search")
+            
+            # Fallback: manual search term expansion
+            logger.info("Attempting fallback search refinement")
+            updated_state = _fallback_search_refinement(state)
+        
+        # Validate refinement results
+        if updated_state.search_attempt <= state.search_attempt:
+            logger.warning("Search refinement did not increment attempt counter")
+            updated_state.search_attempt = state.search_attempt + 1
+        
+        # Log refinement results with error handling
+        try:
+            refinement_summary = refinement_engine.get_refinement_summary(updated_state)
+            logger.info(f"Search refinement complete: {refinement_summary['total_attempts']} attempts, "
+                       f"{refinement_summary['final_video_count']} videos found")
+            
+            if refinement_summary['quality_threshold_met']:
+                logger.info("Quality threshold requirements met after refinement")
+            else:
+                logger.warning("Quality threshold requirements still not met after refinement")
+                
+            # Update metadata with refinement information
+            updated_state.update_generation_metadata(
+                refinement_timestamp=datetime.now().isoformat(),
+                refinement_summary=refinement_summary,
+                refinement_success=True
+            )
+            
+        except Exception as e:
+            logger.warning(f"Error getting refinement summary: {e}")
+            updated_state.add_error(f"Refinement summary failed: {str(e)}", "refine_search")
+            
+            # Create basic summary
+            updated_state.update_generation_metadata(
+                refinement_timestamp=datetime.now().isoformat(),
+                refinement_attempt=updated_state.search_attempt,
+                refinement_success=True
+            )
+        
+        return updated_state
+        
+    except Exception as e:
+        logger.error(f"Critical search refinement failure: {e}")
+        state.add_error(f"Critical refinement failure: {str(e)}", "refine_search")
+        
+        # Return state with incremented attempt to prevent infinite loops
+        state.search_attempt += 1
+        return state
+
+
+def _fallback_search_refinement(state: CuratorState) -> CuratorState:
+    """
+    Fallback search refinement when the main refinement engine fails.
     
-    # Log refinement results
-    refinement_summary = refinement_engine.get_refinement_summary(updated_state)
-    logger.info(f"Search refinement complete: {refinement_summary['total_attempts']} attempts, "
-               f"{refinement_summary['final_video_count']} videos found")
+    Args:
+        state: Current curator state
+        
+    Returns:
+        Updated state with basic search refinement
+    """
+    logger.info("Applying fallback search refinement")
     
-    if refinement_summary['quality_threshold_met']:
-        logger.info("Quality threshold requirements met after refinement")
+    # Basic keyword expansion
+    current_terms = state.current_search_terms or state.search_keywords
+    
+    # Simple expansion based on attempt number
+    if state.search_attempt == 0:
+        # Add synonyms
+        expanded_terms = current_terms + ["artificial intelligence", "machine learning", "AI tools"]
+    elif state.search_attempt == 1:
+        # Add broader terms
+        expanded_terms = current_terms + ["technology", "innovation", "automation"]
     else:
-        logger.warning("Quality threshold requirements still not met after refinement")
+        # Add very broad terms
+        expanded_terms = current_terms + ["tech news", "software", "digital"]
     
-    return updated_state
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_terms = []
+    for term in expanded_terms:
+        if term.lower() not in seen:
+            seen.add(term.lower())
+            unique_terms.append(term)
+    
+    state.current_search_terms = unique_terms[:10]  # Limit to 10 terms
+    state.search_attempt += 1
+    
+    logger.info(f"Fallback refinement applied: {len(unique_terms)} search terms")
+    state.add_error("Used fallback search refinement due to engine failure", "refine_search")
+    
+    return state
 
 
 # Conditional routing functions
