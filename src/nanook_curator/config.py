@@ -212,7 +212,7 @@ class Configuration(BaseModel):
         try:
             return cls()
         except ValidationError as e:
-            raise ValidationError(f"Configuration validation failed: {e}")
+            raise e
     
     def validate_api_keys(self) -> bool:
         """
