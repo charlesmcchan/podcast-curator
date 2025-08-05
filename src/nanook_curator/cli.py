@@ -113,55 +113,6 @@ def display_execution_results(state: CuratorState, execution_time: float):
     console.print("\n" + "="*60)
     console.print(Panel.fit("🎉 Execution Complete!", style="bold green"))
     
-    # Summary statistics
-    stats_table = Table(title="Execution Summary")
-    stats_table.add_column("Metric", style="cyan")
-    stats_table.add_column("Value", style="magenta")
-    
-    stats_table.add_row("Execution Time", f"{execution_time:.2f} seconds")
-    stats_table.add_row("Videos Discovered", str(len(state.discovered_videos)))
-    stats_table.add_row("Videos Processed", str(len(state.processed_videos)))
-    stats_table.add_row("Videos Ranked", str(len(state.ranked_videos)))
-    stats_table.add_row("Search Attempts", str(state.search_attempt))
-    stats_table.add_row("Errors Encountered", str(len(state.errors)))
-    
-    if state.podcast_script:
-        word_count = len(state.podcast_script.split())
-        stats_table.add_row("Script Word Count", str(word_count))
-        estimated_duration = word_count / 150  # ~150 words per minute
-        stats_table.add_row("Estimated Duration", f"{estimated_duration:.1f} minutes")
-    
-    console.print(stats_table)
-    
-    # Show top ranked videos if available
-    if state.ranked_videos:
-        console.print("\n")
-        videos_table = Table(title="Top Ranked Videos")
-        videos_table.add_column("Rank", style="cyan")
-        videos_table.add_column("Title", style="white", max_width=40)
-        videos_table.add_column("Channel", style="yellow")
-        videos_table.add_column("Quality Score", style="green")
-        videos_table.add_column("Views", style="blue")
-        
-        for i, video in enumerate(state.ranked_videos[:5], 1):
-            videos_table.add_row(
-                str(i),
-                video.title[:37] + "..." if len(video.title) > 40 else video.title,
-                video.channel,
-                f"{video.quality_score:.1f}" if video.quality_score else "N/A",
-                f"{video.view_count:,}"
-            )
-        
-        console.print(videos_table)
-    
-    # Show errors if any
-    if state.errors:
-        console.print("\n")
-        console.print(Panel(
-            "\n".join(state.errors),
-            title="⚠️  Errors Encountered",
-            style="yellow"
-        ))
 
 
 def init_config_if_needed(ctx, require_config: bool = True):
@@ -320,37 +271,11 @@ def run(ctx, keywords: tuple, max_videos: Optional[int], days_back: Optional[int
             progress.update(task, description="Workflow completed!")
         
         execution_time = (datetime.now() - start_time).total_seconds()
-        
-        # Display results
-        display_execution_results(final_state, execution_time)
-        
-        # Save script to file if specified
-        if output_file and final_state.podcast_script:
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            output_file.write_text(final_state.podcast_script, encoding='utf-8')
-            console.print(f"[green]✓[/green] Script saved to: {output_file}")
-        elif final_state.podcast_script:
-            # Save to default location
-            default_output = config.results_storage_path / f"script_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            default_output.write_text(final_state.podcast_script, encoding='utf-8')
-            console.print(f"[green]✓[/green] Script saved to: {default_output}")
-        
-        # Save metadata
-        metadata_file = config.results_storage_path / f"metadata_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        metadata = {
-            'execution_time': execution_time,
-            'search_keywords': search_keywords,
-            'videos_discovered': len(final_state.discovered_videos),
-            'videos_processed': len(final_state.processed_videos),
-            'videos_ranked': len(final_state.ranked_videos),
-            'search_attempts': final_state.search_attempt,
-            'errors': final_state.errors,
-            'generation_metadata': final_state.generation_metadata
-        }
-        metadata_file.write_text(json.dumps(metadata, indent=2), encoding='utf-8')
-        
-        if verbose:
-            console.print(f"[blue]ℹ[/blue] Metadata saved to: {metadata_file}")
+
+        """Display execution results in a formatted way."""
+        console.print("\n" + "="*60)
+        console.print(Panel.fit("🎉 Execution Complete!", style="bold green"))
+
         
     except Exception as e:
         console.print(f"[red]✗[/red] Workflow execution failed: {e}")
