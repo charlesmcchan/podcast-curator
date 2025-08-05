@@ -23,6 +23,7 @@ class Configuration(BaseModel):
     # API Configuration
     youtube_api_key: str = Field(..., description="YouTube Data API v3 key")
     openai_api_key: str = Field(..., description="OpenAI API key for script generation")
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for script generation")
     
     # Content Discovery Settings
     max_videos: int = Field(default=10, ge=1, le=50, description="Maximum videos to analyze per search")
@@ -83,6 +84,28 @@ class Configuration(BaseModel):
             raise ValueError("OpenAI API key must start with 'sk-' or 'sk-proj-'")
         return v
     
+    @field_validator('openai_model')
+    @classmethod
+    def validate_openai_model(cls, v):
+        """Validate OpenAI model name format."""
+        if not v or not v.strip():
+            raise ValueError("OpenAI model must be provided")
+        
+        # List of known valid OpenAI models (as of current knowledge)
+        valid_models = [
+            'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-4-32k',
+            'gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-3.5-turbo-instruct'
+        ]
+        
+        # Allow any model that starts with known prefixes for future compatibility
+        valid_prefixes = ['gpt-4', 'gpt-3.5', 'gpt-4o']
+        
+        model_lower = v.lower().strip()
+        if model_lower not in [m.lower() for m in valid_models] and not any(model_lower.startswith(prefix) for prefix in valid_prefixes):
+            raise ValueError(f"OpenAI model '{v}' may not be valid. Common models: {', '.join(valid_models[:5])}")
+        
+        return v.strip()
+    
     @field_validator('target_word_count_max')
     @classmethod
     def validate_word_count_range(cls, v, info):
@@ -139,6 +162,7 @@ class Configuration(BaseModel):
         env_mapping = {
             'youtube_api_key': 'YOUTUBE_API_KEY',
             'openai_api_key': 'OPENAI_API_KEY',
+            'openai_model': 'OPENAI_MODEL',
             'max_videos': 'MAX_VIDEOS',
             'days_back': 'DAYS_BACK',
             'quality_threshold': 'QUALITY_THRESHOLD',

@@ -47,19 +47,20 @@ class OpenAIScriptGenerator:
     and response validation for generating podcast scripts from video content.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize the OpenAI script generator.
         
         Args:
             api_key: Optional OpenAI API key. If not provided, uses config.
+            model: Optional OpenAI model name. If not provided, uses config.
         """
         config = get_config()
         self.api_key = api_key or config.openai_api_key
         self.client = OpenAI(api_key=self.api_key)
         
         # Configuration
-        self.model = "gpt-4o-mini"  # Cost-effective model for script generation
+        self.model = model or config.openai_model
         self.max_retries = 3
         self.retry_delay = 1.0  # Initial delay in seconds
         self.max_tokens = 4000  # Sufficient for 1500-word scripts

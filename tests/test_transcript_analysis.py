@@ -13,6 +13,8 @@ def create_mock_config():
     """Create a mock configuration for testing."""
     mock_config = Mock(spec=Configuration)
     mock_config.default_search_keywords = ["AI news", "AI tools", "AI agents", "artificial intelligence", "machine learning"]
+    mock_config.proxy_username = None
+    mock_config.proxy_password = None
     return mock_config
 
 

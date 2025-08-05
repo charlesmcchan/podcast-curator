@@ -91,6 +91,7 @@ def script_generator():
     """Create a script generator instance for testing."""
     with patch('nanook_curator.script_generator.get_config') as mock_config:
         mock_config.return_value.openai_api_key = "sk-test-key-123"
+        mock_config.return_value.openai_model = "gpt-4o-mini"
         generator = OpenAIScriptGenerator()
         return generator
 
@@ -159,6 +160,7 @@ class TestOpenAIScriptGenerator:
         """Test script generator initialization."""
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key-123"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             generator = OpenAIScriptGenerator()
             
@@ -171,10 +173,21 @@ class TestOpenAIScriptGenerator:
         """Test script generator initialization with custom API key."""
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-config-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             generator = OpenAIScriptGenerator(api_key="sk-custom-key")
             
             assert generator.api_key == "sk-custom-key"
+    
+    def test_custom_model_parameter(self):
+        """Test that custom model parameter overrides config."""
+        with patch('nanook_curator.script_generator.get_config') as mock_config:
+            mock_config.return_value.openai_api_key = "sk-config-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
+            
+            generator = OpenAIScriptGenerator(model="gpt-4o")
+            
+            assert generator.model == "gpt-4o"
     
     @patch('nanook_curator.script_generator.OpenAI')
     def test_generate_script_success(self, mock_openai_class, sample_videos, mock_openai_response):
@@ -186,6 +199,7 @@ class TestOpenAIScriptGenerator:
         
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             generator = OpenAIScriptGenerator()
             request = ScriptGenerationRequest(videos=sample_videos)
@@ -241,6 +255,7 @@ class TestOpenAIScriptGenerator:
         
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             with patch('time.sleep'):  # Speed up test by mocking sleep
                 generator = OpenAIScriptGenerator()
@@ -260,6 +275,7 @@ class TestOpenAIScriptGenerator:
         
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             with patch('time.sleep'):  # Speed up test
                 generator = OpenAIScriptGenerator()
@@ -333,6 +349,7 @@ class TestOpenAIScriptGenerator:
         
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             generator = OpenAIScriptGenerator()
             result = generator.validate_api_connection()
@@ -348,6 +365,7 @@ class TestOpenAIScriptGenerator:
         
         with patch('nanook_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
+            mock_config.return_value.openai_model = "gpt-4o-mini"
             
             generator = OpenAIScriptGenerator()
             result = generator.validate_api_connection()

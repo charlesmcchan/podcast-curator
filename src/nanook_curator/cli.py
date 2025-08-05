@@ -193,13 +193,15 @@ def main(ctx, config_file: Optional[Path], verbose: bool, debug: bool, log_file:
               help='Number of days back to search')
 @click.option('--quality-threshold', type=float,
               help='Quality score threshold (0-100)')
+@click.option('--openai-model', type=str,
+              help='OpenAI model to use for script generation (e.g., gpt-4o, gpt-4o-mini, gpt-4-turbo)')
 @click.option('--output-file', '-o', type=click.Path(path_type=Path),
               help='Output file for generated script')
 @click.option('--dry-run', is_flag=True,
               help='Validate configuration and show what would be executed without running')
 @click.pass_context
 def run(ctx, keywords: tuple, max_videos: Optional[int], days_back: Optional[int],
-        quality_threshold: Optional[float], output_file: Optional[Path], dry_run: bool):
+        quality_threshold: Optional[float], openai_model: Optional[str], output_file: Optional[Path], dry_run: bool):
     """
     Run the content curation workflow to generate a podcast script.
     
@@ -221,6 +223,8 @@ def run(ctx, keywords: tuple, max_videos: Optional[int], days_back: Optional[int
         config.days_back = days_back
     if quality_threshold:
         config.quality_threshold = quality_threshold
+    if openai_model:
+        config.openai_model = openai_model
     
     # Validate API keys
     if not config.validate_api_keys():
@@ -233,6 +237,7 @@ def run(ctx, keywords: tuple, max_videos: Optional[int], days_back: Optional[int
         console.print(f"[blue]ℹ[/blue] Max videos: {config.max_videos}")
         console.print(f"[blue]ℹ[/blue] Days back: {config.days_back}")
         console.print(f"[blue]ℹ[/blue] Quality threshold: {config.quality_threshold}")
+        console.print(f"[blue]ℹ[/blue] OpenAI model: {config.openai_model}")
     
     if dry_run:
         console.print(Panel.fit("🔍 Dry Run Mode - Configuration Validation", style="blue"))
@@ -319,6 +324,11 @@ def init_config_file(ctx, output_file: Optional[Path]):
 YOUTUBE_API_KEY=your_youtube_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 
+# OpenAI Configuration
+# Available models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo
+# gpt-4o-mini is cost-effective and suitable for most use cases
+OPENAI_MODEL=gpt-4o-mini
+
 # Content Discovery Settings
 MAX_VIDEOS=10
 DAYS_BACK=7
@@ -394,7 +404,7 @@ def validate(ctx):
         console.print("[green]✓[/green] YouTube API client initialized")
         
         # Test OpenAI API
-        script_generator = OpenAIScriptGenerator(config.openai_api_key)
+        script_generator = OpenAIScriptGenerator(config.openai_api_key, config.openai_model)
         console.print("[green]✓[/green] OpenAI API client initialized")
         
         console.print(Panel.fit("✅ All validations passed!", style="bold green"))
@@ -837,7 +847,7 @@ def test_apis(ctx, youtube: bool, openai: bool, all_apis: bool, timeout: int):
             import time
             
             start_time = time.time()
-            script_generator = OpenAIScriptGenerator(config.openai_api_key)
+            script_generator = OpenAIScriptGenerator(config.openai_api_key, config.openai_model)
             
             # Perform a simple test generation
             test_prompt = "Generate a brief test response to verify API connectivity."

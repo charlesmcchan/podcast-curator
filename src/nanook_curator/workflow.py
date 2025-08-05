@@ -561,7 +561,7 @@ def generate_script_node(state: CuratorState) -> CuratorState:
     generation_errors = []
     
     try:
-        script_generator = OpenAIScriptGenerator(config.openai_api_key)
+        script_generator = OpenAIScriptGenerator(config.openai_api_key, config.openai_model)
         
         # Create script generation request with error handling
         try:
