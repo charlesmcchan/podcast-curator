@@ -9,9 +9,8 @@ import logging
 import re
 import time
 import random
-from typing import List, Optional, Dict, Any, Set, Tuple
+from typing import List, Optional, Dict, Any
 from collections import Counter
-import math
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.proxies import WebshareProxyConfig
 from youtube_transcript_api._errors import (

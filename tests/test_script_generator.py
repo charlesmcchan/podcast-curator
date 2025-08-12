@@ -6,8 +6,7 @@ prompt generation, error handling, retry logic, and response validation.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from openai import OpenAI
+from unittest.mock import Mock, patch
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 

@@ -9,7 +9,7 @@ import sys
 import logging
 import json
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from datetime import datetime, timedelta
 
 import click
@@ -18,9 +18,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.logging import RichHandler
-from rich.json import JSON
 
-from .config import Configuration, init_config, get_config, reset_config
+from .config import Configuration, init_config
 from .models import CuratorState
 from .workflow import create_curator_workflow
 # Error handling imports removed - using built-in logging setup

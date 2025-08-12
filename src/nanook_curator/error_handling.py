@@ -8,7 +8,7 @@ to ensure robust operation with graceful degradation when individual components 
 import logging
 import time
 import random
-from typing import Callable, Any, Optional, Dict, List, Type
+from typing import Callable, Any, Optional, Dict, List
 from functools import wraps
 from datetime import datetime
 

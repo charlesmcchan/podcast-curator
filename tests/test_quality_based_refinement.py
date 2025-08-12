@@ -1,9 +1,7 @@
 """
 Tests for the quality-based search refinement system.
 """
-
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
 from src.nanook_curator.quality_based_refinement import (
     QualityBasedRefinementEngine, QualityFailureType, QualityAnalysis, 

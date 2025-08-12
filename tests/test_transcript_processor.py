@@ -1,9 +1,7 @@
 """
 Tests for the transcript processor module.
 """
-
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from youtube_transcript_api._errors import (
     TranscriptsDisabled,
     NoTranscriptFound,

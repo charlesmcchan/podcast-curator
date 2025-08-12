@@ -10,8 +10,7 @@ import time
 import logging
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
-from openai.types.chat import ChatCompletion
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from .models import VideoData, CuratorState
 from .config import get_config

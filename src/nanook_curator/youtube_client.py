@@ -8,7 +8,6 @@ Implements video search with date filtering and trending indicators.
 
 import time
 import logging
-import math
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass

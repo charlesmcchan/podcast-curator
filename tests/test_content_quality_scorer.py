@@ -1,8 +1,6 @@
 """
 Tests for the content quality scoring system.
 """
-
-import pytest
 from unittest.mock import Mock, patch
 from src.nanook_curator.content_quality_scorer import ContentQualityScorer, ContentQualityMetrics
 from src.nanook_curator.engagement_analyzer import EngagementMetrics

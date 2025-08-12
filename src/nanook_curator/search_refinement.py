@@ -10,11 +10,9 @@ This module provides iterative search refinement capabilities including:
 """
 
 import logging
-import re
-from typing import List, Dict, Optional, Any, Set, Tuple
+from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
-from datetime import datetime
 
 from .models import VideoData, CuratorState
 from .config import get_config, Configuration

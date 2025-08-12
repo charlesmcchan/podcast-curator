@@ -1,8 +1,6 @@
 """
 Tests for the engagement analyzer module.
 """
-
-import pytest
 from unittest.mock import Mock, patch
 from src.nanook_curator.engagement_analyzer import EngagementAnalyzer, EngagementMetrics
 from src.nanook_curator.models import VideoData

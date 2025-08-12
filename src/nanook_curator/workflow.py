@@ -9,14 +9,13 @@ and iterative search refinement with parallel processing capabilities.
 import logging
 import time
 from typing import Dict, Any, List, Optional
-from functools import wraps
 from datetime import datetime
 
 from langgraph.graph import StateGraph, END
 
-from .models import VideoData, CuratorState
+from .models import CuratorState
 from .config import get_config, Configuration
-from .youtube_client import YouTubeClient, SearchFilters
+from .youtube_client import YouTubeClient
 from .transcript_processor import TranscriptProcessor
 from .engagement_analyzer import EngagementAnalyzer
 from .content_quality_scorer import ContentQualityScorer

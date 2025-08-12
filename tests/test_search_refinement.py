@@ -1,10 +1,7 @@
 """
 Tests for the search refinement system.
 """
-
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
 from src.nanook_curator.search_refinement import (
     SearchRefinementEngine, RefinementStrategy, RefinementResult, refine_search_node
 )

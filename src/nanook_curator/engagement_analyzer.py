@@ -12,7 +12,6 @@ import logging
 import re
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
-import math
 
 from .models import VideoData
 from .config import get_config, Configuration

@@ -6,7 +6,7 @@ including mock API responses and error handling scenarios.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
 from googleapiclient.errors import HttpError
 from google.auth.exceptions import GoogleAuthError

@@ -1,8 +1,6 @@
 """
 Tests for the video ranking system.
 """
-
-import pytest
 from unittest.mock import Mock, patch
 from datetime import datetime, timezone, timedelta
 from src.nanook_curator.video_ranking_system import (

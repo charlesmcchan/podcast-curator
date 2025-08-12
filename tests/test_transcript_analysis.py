@@ -1,8 +1,6 @@
 """
 Tests for transcript analysis functionality in the nanook-curator system.
 """
-
-import pytest
 from unittest.mock import Mock, patch
 from src.nanook_curator.transcript_processor import TranscriptProcessor
 from src.nanook_curator.models import VideoData

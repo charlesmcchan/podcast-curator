@@ -9,7 +9,6 @@ This module provides comprehensive video ranking capabilities including:
 """
 
 import logging
-import math
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass

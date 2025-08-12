@@ -11,7 +11,7 @@ This module provides comprehensive content quality analysis including:
 import logging
 import re
 import math
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from collections import Counter
 
