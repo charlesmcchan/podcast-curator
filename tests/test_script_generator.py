@@ -10,14 +10,14 @@ from unittest.mock import Mock, patch
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
-from nanook_curator.script_generator import (
+from src.podcast_curator.script_generator import (
     OpenAIScriptGenerator,
     ScriptGenerationRequest,
     ScriptGenerationResponse,
     generate_podcast_script,
     update_curator_state_with_script
 )
-from nanook_curator.models import VideoData, CuratorState
+from src.podcast_curator.models import VideoData, CuratorState
 
 
 @pytest.fixture
@@ -88,7 +88,7 @@ That's your AI update for today. The revolution isn't coming - it's here, and it
 @pytest.fixture
 def script_generator():
     """Create a script generator instance for testing."""
-    with patch('nanook_curator.script_generator.get_config') as mock_config:
+    with patch('src.podcast_curator.script_generator.get_config') as mock_config:
         mock_config.return_value.openai_api_key = "sk-test-key-123"
         mock_config.return_value.openai_model = "gpt-4o-mini"
         generator = OpenAIScriptGenerator()
@@ -157,7 +157,7 @@ class TestOpenAIScriptGenerator:
     
     def test_initialization(self):
         """Test script generator initialization."""
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key-123"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -170,7 +170,7 @@ class TestOpenAIScriptGenerator:
     
     def test_initialization_with_custom_key(self):
         """Test script generator initialization with custom API key."""
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-config-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -180,7 +180,7 @@ class TestOpenAIScriptGenerator:
     
     def test_custom_model_parameter(self):
         """Test that custom model parameter overrides config."""
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-config-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -188,7 +188,7 @@ class TestOpenAIScriptGenerator:
             
             assert generator.model == "gpt-4o"
     
-    @patch('nanook_curator.script_generator.OpenAI')
+    @patch('src.podcast_curator.script_generator.OpenAI')
     def test_generate_script_success(self, mock_openai_class, sample_videos, mock_openai_response):
         """Test successful script generation."""
         # Setup mocks
@@ -196,7 +196,7 @@ class TestOpenAIScriptGenerator:
         mock_openai_class.return_value = mock_client
         mock_client.chat.completions.create.return_value = mock_openai_response
         
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -239,7 +239,7 @@ class TestOpenAIScriptGenerator:
         with pytest.raises(ValueError, match="At least one video must have a transcript"):
             script_generator.generate_script(request)
     
-    @patch('nanook_curator.script_generator.OpenAI')
+    @patch('src.podcast_curator.script_generator.OpenAI')
     def test_generate_script_api_failure_with_retry(self, mock_openai_class, sample_videos, mock_openai_response):
         """Test script generation with API failure and retry logic."""
         mock_client = Mock()
@@ -252,7 +252,7 @@ class TestOpenAIScriptGenerator:
             mock_openai_response
         ]
         
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -265,14 +265,14 @@ class TestOpenAIScriptGenerator:
                 assert isinstance(response, ScriptGenerationResponse)
                 assert mock_client.chat.completions.create.call_count == 3
     
-    @patch('nanook_curator.script_generator.OpenAI')
+    @patch('src.podcast_curator.script_generator.OpenAI')
     def test_generate_script_all_retries_fail(self, mock_openai_class, sample_videos):
         """Test script generation when all retry attempts fail."""
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
         mock_client.chat.completions.create.side_effect = Exception("Persistent API Error")
         
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -335,7 +335,7 @@ class TestOpenAIScriptGenerator:
         assert "750-1500 word" in prompt
         assert "SYNTHESIS INSTRUCTIONS:" in prompt  # Check for new synthesis instructions
     
-    @patch('nanook_curator.script_generator.OpenAI')
+    @patch('src.podcast_curator.script_generator.OpenAI')
     def test_validate_api_connection_success(self, mock_openai_class):
         """Test successful API connection validation."""
         mock_client = Mock()
@@ -346,7 +346,7 @@ class TestOpenAIScriptGenerator:
         mock_response.choices[0].message.content = "Test response"
         mock_client.chat.completions.create.return_value = mock_response
         
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -355,14 +355,14 @@ class TestOpenAIScriptGenerator:
             
             assert result is True
     
-    @patch('nanook_curator.script_generator.OpenAI')
+    @patch('src.podcast_curator.script_generator.OpenAI')
     def test_validate_api_connection_failure(self, mock_openai_class):
         """Test API connection validation failure."""
         mock_client = Mock()
         mock_openai_class.return_value = mock_client
         mock_client.chat.completions.create.side_effect = Exception("API Error")
         
-        with patch('nanook_curator.script_generator.get_config') as mock_config:
+        with patch('src.podcast_curator.script_generator.get_config') as mock_config:
             mock_config.return_value.openai_api_key = "sk-test-key"
             mock_config.return_value.openai_model = "gpt-4o-mini"
             
@@ -375,7 +375,7 @@ class TestOpenAIScriptGenerator:
 class TestConvenienceFunctions:
     """Test convenience functions for script generation."""
     
-    @patch('nanook_curator.script_generator.OpenAIScriptGenerator')
+    @patch('src.podcast_curator.script_generator.OpenAIScriptGenerator')
     def test_generate_podcast_script(self, mock_generator_class, sample_videos):
         """Test the convenience function for generating podcast scripts."""
         mock_generator = Mock()
@@ -491,7 +491,7 @@ class TestScriptSynthesis:
             )
         ]
         
-        with patch('nanook_curator.script_generator.logger') as mock_logger:
+        with patch('src.podcast_curator.script_generator.logger') as mock_logger:
             top_videos = script_generator._select_top_ranked_videos(videos)
             
             assert len(top_videos) == 2
@@ -564,7 +564,7 @@ In summary, these are the key takeaways from our analysis and discussion. The co
             
             request = ScriptGenerationRequest(videos=sample_videos)
             
-            with patch('nanook_curator.script_generator.logger') as mock_logger:
+            with patch('src.podcast_curator.script_generator.logger') as mock_logger:
                 response = script_generator.generate_script(request)
                 
                 # Should be trimmed
@@ -767,7 +767,7 @@ In summary, these developments are significant and represent a major shift in ho
                 target_word_count_max=1500
             )
             
-            with patch('nanook_curator.script_generator.logger') as mock_logger:
+            with patch('src.podcast_curator.script_generator.logger') as mock_logger:
                 response = script_generator.generate_script(request)
                 
                 # Should be automatically trimmed to ~10 minutes (1550 words max, allow small margin)

@@ -1,5 +1,5 @@
 """
-Quality-based search refinement system for the nanook-curator.
+Quality-based search refinement system for the podcast-curator.
 
 This module provides quality-based refinement capabilities including:
 - Quality failure analysis and categorization

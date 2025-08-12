@@ -1,5 +1,5 @@
 """
-Engagement metrics analyzer for the nanook-curator system.
+Engagement metrics analyzer for the podcast-curator system.
 
 This module provides comprehensive engagement analysis for YouTube videos including:
 - Like-to-dislike ratio calculation with configurable thresholds

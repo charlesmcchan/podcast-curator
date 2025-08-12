@@ -11,12 +11,12 @@ from datetime import datetime, timedelta
 from googleapiclient.errors import HttpError
 from google.auth.exceptions import GoogleAuthError
 
-from src.nanook_curator.youtube_client import (
+from src.podcast_curator.youtube_client import (
     YouTubeClient, SearchFilters, RateLimitError, 
     AuthenticationError, YouTubeAPIError
 )
-from src.nanook_curator.config import Configuration
-from src.nanook_curator.models import VideoData
+from src.podcast_curator.config import Configuration
+from src.podcast_curator.models import VideoData
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def mock_youtube_service():
 class TestYouTubeClient:
     """Test cases for YouTubeClient class."""
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_client_initialization_success(self, mock_build, mock_config):
         """Test successful client initialization."""
         mock_build.return_value = Mock()
@@ -153,7 +153,7 @@ class TestYouTubeClient:
         assert client.quota_used == 0
         mock_build.assert_called_once_with('youtube', 'v3', developerKey=mock_config.youtube_api_key)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_client_initialization_auth_error(self, mock_build, mock_config):
         """Test client initialization with authentication error."""
         mock_build.side_effect = GoogleAuthError("Invalid API key")
@@ -161,7 +161,7 @@ class TestYouTubeClient:
         with pytest.raises(AuthenticationError, match="YouTube API authentication failed"):
             YouTubeClient(mock_config)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_search_videos_success(self, mock_build, mock_config, search_filters, mock_youtube_service):
         """Test successful video search."""
         mock_build.return_value = mock_youtube_service
@@ -174,7 +174,7 @@ class TestYouTubeClient:
         assert results[1]['id']['videoId'] == 'jNQXAC9IVRw'
         assert client.quota_used == 100  # Search operation costs 100 quota
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_get_video_details_success(self, mock_build, mock_config, mock_youtube_service):
         """Test successful video details fetching."""
         mock_build.return_value = mock_youtube_service
@@ -188,7 +188,7 @@ class TestYouTubeClient:
         assert results[1]['id'] == 'jNQXAC9IVRw'
         assert client.quota_used == 1  # Videos operation costs 1 quota
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_get_channel_info_success(self, mock_build, mock_config, mock_youtube_service):
         """Test successful channel info fetching."""
         mock_build.return_value = mock_youtube_service
@@ -202,7 +202,7 @@ class TestYouTubeClient:
         assert 'test_channel_2' in results
         assert client.quota_used == 1  # Channels operation costs 1 quota
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_quota_limit_enforcement(self, mock_build, mock_config, search_filters, mock_youtube_service):
         """Test quota limit enforcement."""
         mock_build.return_value = mock_youtube_service
@@ -212,7 +212,7 @@ class TestYouTubeClient:
         with pytest.raises(RateLimitError, match="Quota limit would be exceeded"):
             client.search_videos(search_filters)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_http_error_handling(self, mock_build, mock_config, search_filters):
         """Test HTTP error handling with retry logic."""
         mock_service = Mock()
@@ -231,7 +231,7 @@ class TestYouTubeClient:
         with pytest.raises(YouTubeAPIError, match="All retry attempts failed"):
             client.search_videos(search_filters)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_rate_limit_error_handling(self, mock_build, mock_config, search_filters):
         """Test rate limit error handling."""
         mock_service = Mock()
@@ -250,7 +250,7 @@ class TestYouTubeClient:
         with pytest.raises(RateLimitError, match="YouTube API quota exceeded"):
             client.search_videos(search_filters)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_discover_trending_videos_success(self, mock_build, mock_config, search_filters, mock_youtube_service):
         """Test successful trending video discovery."""
         mock_build.return_value = mock_youtube_service
@@ -269,7 +269,7 @@ class TestYouTubeClient:
         assert all(isinstance(video, VideoData) for video in trending_videos)
         assert all(video.view_count >= search_filters.min_views for video in trending_videos)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_convert_to_video_data(self, mock_build, mock_config):
         """Test conversion of API response to VideoData object."""
         mock_build.return_value = Mock()
@@ -307,7 +307,7 @@ class TestYouTubeClient:
         assert video_data.comment_count == 20
         assert video_data.upload_date == '2024-01-01T12:00:00Z'
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_trending_score_calculation(self, mock_build, mock_config):
         """Test trending score calculation."""
         mock_build.return_value = Mock()
@@ -345,7 +345,7 @@ class TestYouTubeClient:
         assert filters.min_views == 5000
         assert filters.order == "relevance"  # Default value
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_quota_usage_tracking(self, mock_build, mock_config):
         """Test quota usage tracking."""
         mock_build.return_value = Mock()
@@ -367,7 +367,7 @@ class TestYouTubeClient:
         used, limit = client.get_quota_usage()
         assert used == 0
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_custom_quota_limit(self, mock_build, mock_config):
         """Test setting custom quota limit."""
         mock_build.return_value = Mock()
@@ -377,7 +377,7 @@ class TestYouTubeClient:
         used, limit = client.get_quota_usage()
         assert limit == 5000
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_discover_videos_success(self, mock_build, mock_config, mock_youtube_service):
         """Test the main video discovery function."""
         mock_build.return_value = mock_youtube_service
@@ -402,7 +402,7 @@ class TestYouTubeClient:
             scores = [client._calculate_trending_score(video) for video in discovered_videos]
             assert scores == sorted(scores, reverse=True)
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_discover_videos_no_results(self, mock_build, mock_config):
         """Test video discovery with no search results."""
         mock_service = Mock()
@@ -417,7 +417,7 @@ class TestYouTubeClient:
         
         assert len(discovered_videos) == 0
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_meets_discovery_criteria(self, mock_build, mock_config):
         """Test the discovery criteria filtering."""
         mock_build.return_value = Mock()
@@ -477,7 +477,7 @@ class TestYouTubeClient:
         
         assert client._meets_discovery_criteria(no_engagement_video, days_back=7) is False
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_enhanced_trending_score_calculation(self, mock_build, mock_config):
         """Test the enhanced trending score calculation with multiple factors."""
         mock_build.return_value = Mock()
@@ -516,7 +516,7 @@ class TestYouTubeClient:
         assert trending_score > 0
         assert moderate_score > 0
     
-    @patch('src.nanook_curator.youtube_client.build')
+    @patch('src.podcast_curator.youtube_client.build')
     def test_discover_videos_with_filtering(self, mock_build, mock_config):
         """Test video discovery with mixed quality videos to verify filtering."""
         mock_service = Mock()

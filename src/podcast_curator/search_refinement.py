@@ -1,5 +1,5 @@
 """
-Search parameter refinement system for the nanook-curator.
+Search parameter refinement system for the podcast-curator.
 
 This module provides iterative search refinement capabilities including:
 - Progressive search strategy with multiple refinement attempts

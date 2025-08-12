@@ -1,7 +1,7 @@
 """
-Command-line interface for nanook-curator.
+Command-line interface for podcast-curator.
 
-This module provides a comprehensive CLI for the nanook-curator system with support for
+This module provides a comprehensive CLI for the podcast-curator system with support for
 manual execution, configuration management, verbose logging, and debug options.
 """
 
@@ -73,7 +73,7 @@ def setup_cli_logging(log_level: str, log_file: Optional[Path] = None, verbose: 
 
 def display_config_table(config: Configuration):
     """Display configuration in a formatted table."""
-    table = Table(title="Nanook Curator Configuration")
+    table = Table(title="Podcast Curator Configuration")
     table.add_column("Setting", style="cyan", no_wrap=True)
     table.add_column("Value", style="magenta")
     table.add_column("Description", style="green")
@@ -150,7 +150,7 @@ def init_config_if_needed(ctx, require_config: bool = True):
             console.print(f"[red]✗[/red] Configuration error: {str(e)}")
             if debug:
                 console.print_exception()
-            console.print("\n[blue]ℹ[/blue] Try running 'nanook-curator init-config-file' to create a configuration template")
+            console.print("\n[blue]ℹ[/blue] Try running 'podcast-curator init-config-file' to create a configuration template")
             sys.exit(1)
         else:
             # For commands that don't require config, set up basic logging
@@ -168,7 +168,7 @@ def init_config_if_needed(ctx, require_config: bool = True):
 @click.pass_context
 def main(ctx, config_file: Optional[Path], verbose: bool, debug: bool, log_file: Optional[Path]):
     """
-    Nanook Curator - AI-powered content curation system for YouTube videos.
+    Podcast Curator - AI-powered content curation system for YouTube videos.
     
     Automatically discovers trending YouTube videos about AI topics, analyzes content
     through transcripts, and generates curated podcast scripts.
@@ -316,7 +316,7 @@ def init_config_file(ctx, output_file: Optional[Path]):
     if not output_file:
         output_file = Path('.env')
     
-    template = """# Nanook Curator Configuration
+    template = """# Podcast Curator Configuration
 # Copy this file to .env and fill in your API keys
 
 # Required API Keys
@@ -345,7 +345,7 @@ SCRIPT_LANGUAGE=en
 
 # Storage Configuration
 RESULTS_STORAGE_PATH=./output
-LOG_FILE=./output/nanook-curator.log
+LOG_FILE=./output/podcast-curator.log
 
 # Logging Configuration
 LOG_LEVEL=INFO
@@ -524,12 +524,12 @@ def schedule(ctx, schedule_info: bool):
         console.print(Panel.fit("📅 Scheduling Information", style="bold blue"))
         
         console.print("\n[bold]Cron Example (Daily at 9 AM):[/bold]")
-        console.print("0 9 * * * /path/to/nanook-curator run --config-file /path/to/.env")
+        console.print("0 9 * * * /path/to/podcast-curator run --config-file /path/to/.env")
         
         console.print("\n[bold]Systemd Timer Example:[/bold]")
         console.print("""[Unit]
-Description=Nanook Curator Daily Run
-Requires=nanook-curator.service
+Description=Podcast Curator Daily Run
+Requires=podcast-curator.service
 
 [Timer]
 OnCalendar=daily
@@ -542,7 +542,7 @@ WantedBy=timers.target""")
         console.print("""apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: nanook-curator
+  name: podcast-curator
 spec:
   schedule: "0 9 * * *"
   jobTemplate:
@@ -550,9 +550,9 @@ spec:
       template:
         spec:
           containers:
-          - name: nanook-curator
-            image: nanook-curator:latest
-            command: ["nanook-curator", "run"]
+          - name: podcast-curator
+            image: podcast-curator:latest
+            command: ["podcast-curator", "run"]
             env:
             - name: YOUTUBE_API_KEY
               valueFrom:
@@ -1037,7 +1037,7 @@ def dry_run(ctx, keywords: tuple, show_config: bool, validate_workflow: bool):
     
     if not validation_errors:
         console.print(Panel.fit("✅ Dry run validation passed! Ready to execute.", style="bold green"))
-        console.print("\n[blue]ℹ[/blue] Run 'nanook-curator run' to execute the workflow")
+        console.print("\n[blue]ℹ[/blue] Run 'podcast-curator run' to execute the workflow")
     else:
         console.print(Panel.fit("❌ Dry run validation failed!", style="bold red"))
         console.print("\n[blue]ℹ[/blue] Fix the errors above before running the workflow")
@@ -1539,9 +1539,9 @@ That wraps up this week's AI news. Thank you for listening, and we'll see you ne
     if verbose:
         console.print(f"\n[blue]ℹ[/blue] Sample data directory: {sample_data_dir}")
         console.print("[blue]ℹ[/blue] Use these commands to explore sample data:")
-        console.print("  - nanook-curator dry-run --show-config")
-        console.print("  - nanook-curator validate-config --check-values")
-        console.print("  - nanook-curator test-apis --all-apis")
+        console.print("  - podcast-curator dry-run --show-config")
+        console.print("  - podcast-curator validate-config --check-values")
+        console.print("  - podcast-curator test-apis --all-apis")
 
 
 if __name__ == '__main__':

@@ -2,12 +2,12 @@
 Tests for the search refinement system.
 """
 from unittest.mock import Mock, patch
-from src.nanook_curator.search_refinement import (
+from src.podcast_curator.search_refinement import (
     SearchRefinementEngine, RefinementStrategy, RefinementResult, refine_search_node
 )
-from src.nanook_curator.models import VideoData, CuratorState
-from src.nanook_curator.config import Configuration
-from src.nanook_curator.video_ranking_system import RankingResult
+from src.podcast_curator.models import VideoData, CuratorState
+from src.podcast_curator.config import Configuration
+from src.podcast_curator.video_ranking_system import RankingResult
 
 
 def create_mock_config():
@@ -78,8 +78,8 @@ class TestSearchRefinementEngine:
         mock_config = create_mock_config()
         
         # Mock the dependencies to avoid initialization issues
-        with patch('src.nanook_curator.search_refinement.YouTubeClient'), \
-             patch('src.nanook_curator.search_refinement.VideoRankingSystem'):
+        with patch('src.podcast_curator.search_refinement.YouTubeClient'), \
+             patch('src.podcast_curator.search_refinement.VideoRankingSystem'):
             self.refinement_engine = SearchRefinementEngine(config=mock_config)
     
     def test_init(self):
@@ -527,7 +527,7 @@ def test_refine_search_node():
         'quality_threshold_met': True
     }
     
-    with patch('src.nanook_curator.search_refinement.SearchRefinementEngine', return_value=mock_engine):
+    with patch('src.podcast_curator.search_refinement.SearchRefinementEngine', return_value=mock_engine):
         result_state = refine_search_node(state)
         
         assert result_state == state
@@ -540,7 +540,7 @@ def test_refine_search_node_error_handling():
     state = create_test_curator_state()
     
     # Mock the SearchRefinementEngine to raise an exception
-    with patch('src.nanook_curator.search_refinement.SearchRefinementEngine', side_effect=Exception("Engine error")):
+    with patch('src.podcast_curator.search_refinement.SearchRefinementEngine', side_effect=Exception("Engine error")):
         result_state = refine_search_node(state)
         
         assert len(result_state.errors) > 0
@@ -603,8 +603,8 @@ def test_integration_with_existing_systems():
     """Test integration with existing YouTube client and ranking system."""
     mock_config = create_mock_config()
     
-    with patch('src.nanook_curator.search_refinement.YouTubeClient') as mock_youtube_class, \
-         patch('src.nanook_curator.search_refinement.VideoRankingSystem') as mock_ranking_class:
+    with patch('src.podcast_curator.search_refinement.YouTubeClient') as mock_youtube_class, \
+         patch('src.podcast_curator.search_refinement.VideoRankingSystem') as mock_ranking_class:
         
         mock_youtube = Mock()
         mock_ranking = Mock()
@@ -625,8 +625,8 @@ def test_search_filters_creation():
     """Test that SearchFilters are created correctly for different strategies."""
     mock_config = create_mock_config()
     
-    with patch('src.nanook_curator.search_refinement.YouTubeClient'), \
-         patch('src.nanook_curator.search_refinement.VideoRankingSystem'):
+    with patch('src.podcast_curator.search_refinement.YouTubeClient'), \
+         patch('src.podcast_curator.search_refinement.VideoRankingSystem'):
         
         engine = SearchRefinementEngine(config=mock_config)
         state = create_test_curator_state()

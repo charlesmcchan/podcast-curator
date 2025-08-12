@@ -1,5 +1,5 @@
 """
-Comprehensive error handling and recovery mechanisms for the nanook-curator system.
+Comprehensive error handling and recovery mechanisms for the podcast-curator system.
 
 This module provides decorators, retry mechanisms, and error recovery strategies
 to ensure robust operation with graceful degradation when individual components fail.

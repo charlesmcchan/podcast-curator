@@ -10,9 +10,9 @@ from youtube_transcript_api._errors import (
     CouldNotRetrieveTranscript
 )
 
-from src.nanook_curator.transcript_processor import TranscriptProcessor, fetch_transcripts_node
-from src.nanook_curator.models import VideoData, CuratorState
-from src.nanook_curator.config import Configuration
+from src.podcast_curator.transcript_processor import TranscriptProcessor, fetch_transcripts_node
+from src.podcast_curator.models import VideoData, CuratorState
+from src.podcast_curator.config import Configuration
 
 
 def create_mock_config():
@@ -84,7 +84,7 @@ class TestTranscriptProcessor:
         assert "Hello world" in result
         assert "This is a test" in result
         
-    @patch('src.nanook_curator.transcript_processor.YouTubeTranscriptApi.list')
+    @patch('src.podcast_curator.transcript_processor.YouTubeTranscriptApi.list')
     def test_fetch_transcript_success_manual(self, mock_list_transcripts):
         """Test successful transcript fetching with manual transcript."""
         # Mock transcript list and transcript
@@ -103,7 +103,7 @@ class TestTranscriptProcessor:
         assert "Hello world" in result
         mock_list_transcripts.assert_called_once_with('test_video_id')
         
-    @patch('src.nanook_curator.transcript_processor.YouTubeTranscriptApi.list')
+    @patch('src.podcast_curator.transcript_processor.YouTubeTranscriptApi.list')
     def test_fetch_transcript_success_auto_generated(self, mock_list_transcripts):
         """Test successful transcript fetching with auto-generated transcript."""
         # Mock transcript list and transcript
@@ -123,7 +123,7 @@ class TestTranscriptProcessor:
         assert result is not None
         assert "Auto generated content" in result
         
-    @patch('src.nanook_curator.transcript_processor.YouTubeTranscriptApi.list')
+    @patch('src.podcast_curator.transcript_processor.YouTubeTranscriptApi.list')
     def test_fetch_transcript_transcripts_disabled(self, mock_list_transcripts):
         """Test handling of disabled transcripts."""
         mock_list_transcripts.side_effect = TranscriptsDisabled('test_video_id')
@@ -132,7 +132,7 @@ class TestTranscriptProcessor:
         
         assert result is None
         
-    @patch('src.nanook_curator.transcript_processor.YouTubeTranscriptApi.list')
+    @patch('src.podcast_curator.transcript_processor.YouTubeTranscriptApi.list')
     def test_fetch_transcript_video_unavailable(self, mock_list_transcripts):
         """Test handling of unavailable video."""
         mock_list_transcripts.side_effect = VideoUnavailable('test_video_id')
@@ -141,7 +141,7 @@ class TestTranscriptProcessor:
         
         assert result is None
         
-    @patch('src.nanook_curator.transcript_processor.YouTubeTranscriptApi.list')
+    @patch('src.podcast_curator.transcript_processor.YouTubeTranscriptApi.list')
     def test_fetch_transcript_request_failed(self, mock_list_transcripts):
         """Test handling of YouTube request failures."""
         mock_list_transcripts.side_effect = YouTubeRequestFailed('test_video_id', 'HTTP Error')
@@ -150,7 +150,7 @@ class TestTranscriptProcessor:
         
         assert result is None
         
-    @patch('src.nanook_curator.transcript_processor.YouTubeTranscriptApi.list')
+    @patch('src.podcast_curator.transcript_processor.YouTubeTranscriptApi.list')
     def test_fetch_transcript_could_not_retrieve(self, mock_list_transcripts):
         """Test handling when transcript could not be retrieved."""
         mock_list_transcripts.side_effect = CouldNotRetrieveTranscript('test_video_id')
@@ -303,7 +303,7 @@ class TestTranscriptProcessor:
         assert 'artificial intelligence' not in topics
         assert 'machine learning' not in topics
 
-    @patch('src.nanook_curator.transcript_processor.get_config')
+    @patch('src.podcast_curator.transcript_processor.get_config')
     def test_extract_key_topics_without_config(self, mock_get_config):
         """Test extract_key_topics uses default keywords from config when no config is provided."""
         # Create mock config with default keywords (simulating config defaults)
@@ -324,7 +324,7 @@ class TestTranscriptProcessor:
 class TestFetchTranscriptsNode:
     """Test cases for the fetch_transcripts_node function."""
     
-    @patch('src.nanook_curator.transcript_processor.TranscriptProcessor')
+    @patch('src.podcast_curator.transcript_processor.TranscriptProcessor')
     def test_fetch_transcripts_node_success(self, mock_processor_class):
         """Test successful execution of fetch_transcripts_node."""
         # Setup mocks
@@ -346,7 +346,7 @@ class TestFetchTranscriptsNode:
         mock_processor.process_videos_transcripts.assert_called_once_with(state)
         mock_processor.get_transcript_statistics.assert_called_once()
         
-    @patch('src.nanook_curator.transcript_processor.TranscriptProcessor')
+    @patch('src.podcast_curator.transcript_processor.TranscriptProcessor')
     def test_fetch_transcripts_node_error(self, mock_processor_class):
         """Test error handling in fetch_transcripts_node."""
         # Setup mock to raise exception

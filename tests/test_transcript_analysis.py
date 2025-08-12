@@ -1,10 +1,10 @@
 """
-Tests for transcript analysis functionality in the nanook-curator system.
+Tests for transcript analysis functionality in the podcast-curator system.
 """
 from unittest.mock import Mock, patch
-from src.nanook_curator.transcript_processor import TranscriptProcessor
-from src.nanook_curator.models import VideoData
-from src.nanook_curator.config import Configuration
+from src.podcast_curator.transcript_processor import TranscriptProcessor
+from src.podcast_curator.models import VideoData
+from src.podcast_curator.config import Configuration
 
 
 def create_mock_config():

@@ -1,5 +1,5 @@
 """
-Data models for the nanook-curator system.
+Data models for the podcast-curator system.
 
 This module defines the core data structures used throughout the curation workflow,
 including video metadata and the state object that flows through the LangGraph nodes.

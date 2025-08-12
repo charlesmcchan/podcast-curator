@@ -1,5 +1,5 @@
 """
-LangGraph workflow orchestration for the nanook-curator system.
+LangGraph workflow orchestration for the podcast-curator system.
 
 This module implements the complete LangGraph workflow with nodes for each processing step,
 including video discovery, transcript fetching, quality evaluation, ranking, script generation,
@@ -1032,7 +1032,7 @@ def should_refine_after_ranking(state: CuratorState) -> str:
 
 def create_curator_workflow(config: Optional[Configuration] = None):
     """
-    Create the complete LangGraph workflow for the nanook-curator system.
+    Create the complete LangGraph workflow for the podcast-curator system.
     
     Implements the full workflow with parallel processing, conditional routing,
     and iterative refinement capabilities.
@@ -1043,7 +1043,7 @@ def create_curator_workflow(config: Optional[Configuration] = None):
     Returns:
         Compiled LangGraph workflow
     """
-    logger.info("Creating nanook-curator LangGraph workflow")
+    logger.info("Creating podcast-curator LangGraph workflow")
     
     # Create the state graph with CuratorState schema
     workflow = StateGraph(CuratorState)

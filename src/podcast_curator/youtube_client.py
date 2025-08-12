@@ -1,5 +1,5 @@
 """
-YouTube Data API client wrapper for nanook-curator.
+YouTube Data API client wrapper for podcast-curator.
 
 This module provides a comprehensive wrapper around the YouTube Data API v3
 with authentication, rate limiting, error handling, and retry logic.

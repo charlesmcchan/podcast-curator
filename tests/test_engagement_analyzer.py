@@ -2,9 +2,9 @@
 Tests for the engagement analyzer module.
 """
 from unittest.mock import Mock, patch
-from src.nanook_curator.engagement_analyzer import EngagementAnalyzer, EngagementMetrics
-from src.nanook_curator.models import VideoData
-from src.nanook_curator.config import Configuration
+from src.podcast_curator.engagement_analyzer import EngagementAnalyzer, EngagementMetrics
+from src.podcast_curator.models import VideoData
+from src.podcast_curator.config import Configuration
 
 
 def create_mock_config():

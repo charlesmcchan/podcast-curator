@@ -1,4 +1,4 @@
-# nanook-curator
+# podcast-curator
 
 AI-powered content curation system that automatically discovers trending YouTube videos about AI news, tools, and agents, analyzes their content through transcripts, and generates curated podcast scripts of 5-10 minutes in length.
 
@@ -19,7 +19,7 @@ pip install uv
 
 # Clone the repository
 git clone <repository-url>
-cd nanook-curator
+cd podcast-curator
 
 # Install dependencies
 uv sync
@@ -40,10 +40,10 @@ cp .env.example .env
 
 ```bash
 # Run the curator
-nanook-curator
+podcast-curator
 
 # Run with custom configuration
-nanook-curator --config config.yaml
+podcast-curator --config config.yaml
 ```
 
 ## Development

@@ -1,8 +1,8 @@
 """
-Configuration management for nanook-curator.
+Configuration management for podcast-curator.
 
 This module provides centralized configuration management with environment variable
-handling, validation, and default values for the nanook-curator system.
+handling, validation, and default values for the podcast-curator system.
 """
 
 import os
@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 class Configuration(BaseModel):
     """
-    Configuration class for nanook-curator system.
+    Configuration class for podcast-curator system.
     
     Handles API keys, search parameters, quality thresholds, and other settings
     with environment variable support and validation.
@@ -48,7 +48,7 @@ class Configuration(BaseModel):
     
     # Logging Configuration
     log_level: str = Field(default="INFO", description="Logging level")
-    log_file: Path = Field(default=Path("./output/nanook-curator.log"), description="Log file path")
+    log_file: Path = Field(default=Path("./output/podcast-curator.log"), description="Log file path")
     
     # Development Settings
     debug: bool = Field(default=False, description="Enable debug mode")

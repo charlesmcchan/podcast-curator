@@ -3,14 +3,14 @@ Tests for the quality-based search refinement system.
 """
 from unittest.mock import Mock, patch
 from datetime import datetime, timedelta
-from src.nanook_curator.quality_based_refinement import (
+from src.podcast_curator.quality_based_refinement import (
     QualityBasedRefinementEngine, QualityFailureType, QualityAnalysis, 
     QualityRefinementAction, quality_based_refinement_node
 )
-from src.nanook_curator.models import VideoData, CuratorState
-from src.nanook_curator.config import Configuration
-from src.nanook_curator.video_ranking_system import RankingResult, RankingMetrics
-from src.nanook_curator.search_refinement import RefinementStrategy
+from src.podcast_curator.models import VideoData, CuratorState
+from src.podcast_curator.config import Configuration
+from src.podcast_curator.video_ranking_system import RankingResult, RankingMetrics
+from src.podcast_curator.search_refinement import RefinementStrategy
 
 
 def create_mock_config():
@@ -115,9 +115,9 @@ class TestQualityBasedRefinementEngine:
         mock_config = create_mock_config()
         
         # Mock the dependencies to avoid initialization issues
-        with patch('src.nanook_curator.quality_based_refinement.VideoRankingSystem'), \
-             patch('src.nanook_curator.quality_based_refinement.SearchRefinementEngine'), \
-             patch('src.nanook_curator.quality_based_refinement.YouTubeClient'):
+        with patch('src.podcast_curator.quality_based_refinement.VideoRankingSystem'), \
+             patch('src.podcast_curator.quality_based_refinement.SearchRefinementEngine'), \
+             patch('src.podcast_curator.quality_based_refinement.YouTubeClient'):
             self.refinement_engine = QualityBasedRefinementEngine(config=mock_config)
     
     def test_init(self):
@@ -610,7 +610,7 @@ def test_quality_based_refinement_node():
     final_ranking_result = create_mock_ranking_result(state.discovered_videos, meets_requirement=True)
     mock_engine.ranking_system.rank_videos.return_value = final_ranking_result
     
-    with patch('src.nanook_curator.quality_based_refinement.QualityBasedRefinementEngine', return_value=mock_engine):
+    with patch('src.podcast_curator.quality_based_refinement.QualityBasedRefinementEngine', return_value=mock_engine):
         result_state = quality_based_refinement_node(state)
         
         assert result_state == state
@@ -629,7 +629,7 @@ def test_quality_based_refinement_node_no_refinement_needed():
     mock_engine.ranking_system.rank_videos.return_value = mock_ranking_result
     mock_engine.should_trigger_refinement.return_value = (False, Mock())
     
-    with patch('src.nanook_curator.quality_based_refinement.QualityBasedRefinementEngine', return_value=mock_engine):
+    with patch('src.podcast_curator.quality_based_refinement.QualityBasedRefinementEngine', return_value=mock_engine):
         result_state = quality_based_refinement_node(state)
         
         assert result_state.generation_metadata['quality_based_refinement'] == False
@@ -643,7 +643,7 @@ def test_quality_based_refinement_node_error_handling():
     state = create_test_curator_state()
     
     # Mock the engine to raise an exception
-    with patch('src.nanook_curator.quality_based_refinement.QualityBasedRefinementEngine', side_effect=Exception("Engine error")):
+    with patch('src.podcast_curator.quality_based_refinement.QualityBasedRefinementEngine', side_effect=Exception("Engine error")):
         result_state = quality_based_refinement_node(state)
         
         assert len(result_state.errors) > 0
@@ -657,9 +657,9 @@ class TestWeeklyFocusPreservation:
         """Set up test fixtures."""
         mock_config = create_mock_config()
         
-        with patch('src.nanook_curator.quality_based_refinement.VideoRankingSystem'), \
-             patch('src.nanook_curator.quality_based_refinement.SearchRefinementEngine'), \
-             patch('src.nanook_curator.quality_based_refinement.YouTubeClient'):
+        with patch('src.podcast_curator.quality_based_refinement.VideoRankingSystem'), \
+             patch('src.podcast_curator.quality_based_refinement.SearchRefinementEngine'), \
+             patch('src.podcast_curator.quality_based_refinement.YouTubeClient'):
             self.refinement_engine = QualityBasedRefinementEngine(config=mock_config)
     
     def test_weekly_focus_maintained_with_recent_content(self):
@@ -757,9 +757,9 @@ def test_integration_with_existing_systems():
     """Test integration with existing ranking and search systems."""
     mock_config = create_mock_config()
     
-    with patch('src.nanook_curator.quality_based_refinement.VideoRankingSystem') as mock_ranking_class, \
-         patch('src.nanook_curator.quality_based_refinement.SearchRefinementEngine') as mock_search_class, \
-         patch('src.nanook_curator.quality_based_refinement.YouTubeClient') as mock_youtube_class:
+    with patch('src.podcast_curator.quality_based_refinement.VideoRankingSystem') as mock_ranking_class, \
+         patch('src.podcast_curator.quality_based_refinement.SearchRefinementEngine') as mock_search_class, \
+         patch('src.podcast_curator.quality_based_refinement.YouTubeClient') as mock_youtube_class:
         
         mock_ranking = Mock()
         mock_search = Mock()
@@ -787,9 +787,9 @@ def test_quality_thresholds_configuration():
     mock_config.quality_threshold = 75.0
     mock_config.min_quality_videos = 4
     
-    with patch('src.nanook_curator.quality_based_refinement.VideoRankingSystem'), \
-         patch('src.nanook_curator.quality_based_refinement.SearchRefinementEngine'), \
-         patch('src.nanook_curator.quality_based_refinement.YouTubeClient'):
+    with patch('src.podcast_curator.quality_based_refinement.VideoRankingSystem'), \
+         patch('src.podcast_curator.quality_based_refinement.SearchRefinementEngine'), \
+         patch('src.podcast_curator.quality_based_refinement.YouTubeClient'):
         
         engine = QualityBasedRefinementEngine(config=mock_config)
         
@@ -807,9 +807,9 @@ def test_comprehensive_quality_workflow():
     """Test the complete quality-based refinement workflow."""
     mock_config = create_mock_config()
     
-    with patch('src.nanook_curator.quality_based_refinement.VideoRankingSystem') as mock_ranking_class, \
-         patch('src.nanook_curator.quality_based_refinement.SearchRefinementEngine') as mock_search_class, \
-         patch('src.nanook_curator.quality_based_refinement.YouTubeClient') as mock_youtube_class:
+    with patch('src.podcast_curator.quality_based_refinement.VideoRankingSystem') as mock_ranking_class, \
+         patch('src.podcast_curator.quality_based_refinement.SearchRefinementEngine') as mock_search_class, \
+         patch('src.podcast_curator.quality_based_refinement.YouTubeClient') as mock_youtube_class:
         
         # Setup mocks
         mock_ranking = Mock()

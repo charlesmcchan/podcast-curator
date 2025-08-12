@@ -3,13 +3,13 @@ Tests for the video ranking system.
 """
 from unittest.mock import Mock, patch
 from datetime import datetime, timezone, timedelta
-from src.nanook_curator.video_ranking_system import (
+from src.podcast_curator.video_ranking_system import (
     VideoRankingSystem, RankingStrategy, QualityBand, RankingMetrics, RankingResult
 )
-from src.nanook_curator.engagement_analyzer import EngagementMetrics
-from src.nanook_curator.content_quality_scorer import ContentQualityMetrics
-from src.nanook_curator.models import VideoData, CuratorState
-from src.nanook_curator.config import Configuration
+from src.podcast_curator.engagement_analyzer import EngagementMetrics
+from src.podcast_curator.content_quality_scorer import ContentQualityMetrics
+from src.podcast_curator.models import VideoData, CuratorState
+from src.podcast_curator.config import Configuration
 
 
 def create_mock_config():
@@ -89,8 +89,8 @@ class TestVideoRankingSystem:
         mock_config = create_mock_config()
         
         # Mock the dependencies to avoid initialization issues
-        with patch('src.nanook_curator.video_ranking_system.ContentQualityScorer'), \
-             patch('src.nanook_curator.video_ranking_system.EngagementAnalyzer'):
+        with patch('src.podcast_curator.video_ranking_system.ContentQualityScorer'), \
+             patch('src.podcast_curator.video_ranking_system.EngagementAnalyzer'):
             self.ranking_system = VideoRankingSystem(config=mock_config)
     
     def test_init(self):
@@ -122,7 +122,7 @@ class TestVideoRankingSystem:
         video = create_test_video()
         
         # Mock the datetime parsing to raise an exception
-        with patch('src.nanook_curator.video_ranking_system.datetime') as mock_datetime:
+        with patch('src.podcast_curator.video_ranking_system.datetime') as mock_datetime:
             mock_datetime.fromisoformat.side_effect = ValueError("Invalid date")
             score = self.ranking_system.calculate_freshness_score(video)
             
@@ -621,7 +621,7 @@ class TestVideoRankingSystem:
         
         # Test with invalid date by mocking datetime parsing
         video = create_test_video()
-        with patch('src.nanook_curator.video_ranking_system.datetime') as mock_datetime:
+        with patch('src.podcast_curator.video_ranking_system.datetime') as mock_datetime:
             mock_datetime.fromisoformat.side_effect = ValueError("Invalid date")
             age = self.ranking_system._calculate_video_age_days(video)
             assert age == 999  # Should return fallback value

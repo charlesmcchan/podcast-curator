@@ -1,5 +1,5 @@
 """
-Video ranking system for the nanook-curator.
+Video ranking system for the podcast-curator.
 
 This module provides comprehensive video ranking capabilities including:
 - Combined quality scoring (engagement + content + freshness)

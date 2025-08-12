@@ -1,5 +1,5 @@
 """
-Transcript processing module for the nanook-curator system.
+Transcript processing module for the podcast-curator system.
 
 This module handles fetching, cleaning, and parsing YouTube video transcripts
 using the youtube-transcript-api library with robust error handling and fallback mechanisms.

@@ -1,5 +1,5 @@
 """
-Content quality scoring system for the nanook-curator.
+Content quality scoring system for the podcast-curator.
 
 This module provides comprehensive content quality analysis including:
 - Enhanced transcript coherence evaluation with advanced algorithms

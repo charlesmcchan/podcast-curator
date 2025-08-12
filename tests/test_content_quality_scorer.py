@@ -2,10 +2,10 @@
 Tests for the content quality scoring system.
 """
 from unittest.mock import Mock, patch
-from src.nanook_curator.content_quality_scorer import ContentQualityScorer, ContentQualityMetrics
-from src.nanook_curator.engagement_analyzer import EngagementMetrics
-from src.nanook_curator.models import VideoData
-from src.nanook_curator.config import Configuration
+from src.podcast_curator.content_quality_scorer import ContentQualityScorer, ContentQualityMetrics
+from src.podcast_curator.engagement_analyzer import EngagementMetrics
+from src.podcast_curator.models import VideoData
+from src.podcast_curator.config import Configuration
 
 
 def create_mock_config():
@@ -71,8 +71,8 @@ class TestContentQualityScorer:
         mock_config = create_mock_config()
         
         # Mock the dependencies to avoid initialization issues
-        with patch('src.nanook_curator.content_quality_scorer.TranscriptProcessor'), \
-             patch('src.nanook_curator.content_quality_scorer.EngagementAnalyzer'):
+        with patch('src.podcast_curator.content_quality_scorer.TranscriptProcessor'), \
+             patch('src.podcast_curator.content_quality_scorer.EngagementAnalyzer'):
             self.scorer = ContentQualityScorer(config=mock_config)
     
     def test_init(self):
